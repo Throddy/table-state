@@ -99,8 +99,8 @@ def check_facts() -> None:
                                             people=('people', 'sum'), hands=('hands', 'sum'), cups=('cups', 'sum'))
     expect('25.10: строк/занято/people/hands/cups', by_day.loc['2026-10-25'].astype(int).tolist(), [126, 7, 9, 8, 7])
     expect('26.10: строк/занято/people/hands/cups', by_day.loc['2026-10-26'].astype(int).tolist(), [105, 16, 20, 21, 14])
-    # Числа «по слотам» в 4.4 контракта посчитаны по table_id (см. experiments/PROPOSALS.md):
-    # на кадре-выбросе 5 рамок, и его table_1 физически стоит в слоте 2.
+    # 4.4 (контракт 1.4): суммы по table_id и по slot различаются, потому что на
+    # кадре-выбросе 5 рамок и его table_1 физически стоит в слоте 2.
     by_table = labels.groupby('table_id')[COUNTS].sum().astype(int)
     for n, want in {1: [15, 14, 11, 10, 9], 2: [1, 2, 1, 1, 1], 3: [6, 8, 7, 7, 8],
                     4: [0, 0, 0, 0, 0], 5: [2, 2, 0, 0, 5], 6: [5, 3, 2, 1, 5]}.items():

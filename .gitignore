@@ -2,6 +2,9 @@
 data/
 artifacts/
 *.jpg
+# листы и демо в report/ коммитим
+!report/**/*.jpg
+!report/**/*.png
 *.parquet
 *.pt
 *.pth
