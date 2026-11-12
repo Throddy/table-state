@@ -1,0 +1,33 @@
+# Основной конфиг сборки. Меняет только роль A (раздел 5 контракта).
+seed: 419
+
+# Источники детекций и признаков строк, участвующие в сборке.
+sources:
+  dets: [prod]
+  rowfeats: []
+
+slots:
+  edges: [0, 275, 450, 690, 925, 1140, 1300]
+
+# Зоны стола (раздел 9.1). Доли от ширины w и высоты h рамки стола.
+zones:
+  top:  {left: 0.08, right: 0.08, up: 0.08, down: 0.08}
+  seat: {left: 0.45, right: 0.45, up: 1.10, down: 0.90}
+  wide: {left: 0.45, right: 0.45, up: 1.10, down: 0.90}   # seat, обрезанная по кадру
+  # Единственное место для параметров, зависящих от слота (слоты 1 и 6). Пока пусто.
+  slot_overrides: {}
+
+crops:
+  narrow: {kind: top, scale: 4.0}
+  wide:   {kind: wide, scale: 2.5}
+
+rows:
+  ir_saturation_threshold: 0.05   # is_ir = 1, если средняя насыщенность HSV ниже порога
+
+# Постобработка (раздел 11.3). Каждое правило включается отдельно после проверки по 12.3.
+post:
+  hands_need_people: false
+  hands_cap: false
+  round_counts: false
+  clip: true
+  empty_night: false

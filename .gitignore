@@ -1,0 +1,13 @@
+# данные и артефакты не попадают в git (раздел 5 контракта)
+data/
+artifacts/
+*.jpg
+*.parquet
+*.pt
+*.pth
+*.onnx
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store

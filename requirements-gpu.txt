@@ -1,0 +1,5 @@
+# Зависимости треков B (det) и C (ov). Ставятся поверх requirements.txt:
+#   pip install -r requirements.txt -r requirements-gpu.txt
+# Шаблон пустой: каждый трек дописывает свои пакеты с точными версиями
+# (torch, ultralytics, transformers и т. д.) и комментарием, для какой задачи.
+# В окружение ядра (трек A) эти пакеты не ставятся.
