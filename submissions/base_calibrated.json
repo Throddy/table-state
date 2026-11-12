@@ -384,5 +384,6 @@
     },
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": 0.63967,
+  "public_lb_note": "12 место на Public на момент отправки, 13.11 01:44 МСК"
 }
