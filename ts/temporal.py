@@ -17,7 +17,8 @@ DEFAULTS = {
     # исключения из фильтра площади (стоящий вплотную гость по правилам считается):
     'people_big_keep_with_hand': False,     # в зоне top этого стола на том же кадре есть рука
     'people_big_keep_persistent': False,    # тот же человек (IoU >= 0.5) есть на обоих соседних кадрах
-    # двойной счёт посуды: миска, перекрытая (IoU не ниже порога) подносом или чашкой того же стола, не считается
+    # двойной счёт посуды (covered_dishes): тарелка или миска на подносе (IoU не ниже порога или центр внутри
+    # бокса подноса) и миска, совпадающая с чашкой, в dishes не идут
     'bowl_overlap_iou': 0.3,
 }
 
@@ -59,25 +60,37 @@ def apply_filters(assigned: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     return assigned[keep]
 
 
-def overlapping_bowls(frame: pd.DataFrame, iou_thr: float | None) -> np.ndarray:
-    """Маска мисок, которые перекрываются (IoU >= `iou_thr`) с подносом или чашкой той же строки и кадра.
+def covered_dishes(frame: pd.DataFrame, iou_thr: float | None) -> np.ndarray:
+    """Маска тарелок и мисок, которые уже посчитаны другим объектом той же строки и кадра.
 
-    COCO-детектор часто называет миской чашку или посуду на подносе; такая миска уже посчитана
-    в cups или в подносе (с множителем `post.tray_mult`), второй раз в dishes она не идёт.
+    - тарелка или миска на подносе: IoU с подносом не ниже `iou_thr` или её центр внутри бокса подноса.
+      Поднос идёт в dishes с множителем `post.tray_mult` (2 подтверждено на Public: 1 и 3 хуже на 0.042),
+      то есть посуда на нём уже учтена;
+    - миска, совпадающая с чашкой (IoU не ниже `iou_thr`): COCO-детектор часто называет чашку миской.
     """
     from .assign import _iou
     mask = np.zeros(len(frame), dtype=bool)
-    if not iou_thr or not len(frame) or not (frame['class_name'] == 'bowl').any():
+    if not iou_thr or not len(frame) or not frame['class_name'].isin(['plate', 'bowl']).any():
         return mask
     position = {index: i for i, index in enumerate(frame.index)}
+    box = ['x1', 'y1', 'x2', 'y2']
     for _, g in frame.groupby(['row_id', 'dt'], sort=False):
-        bowls = g[g['class_name'] == 'bowl']
-        others = g[g['class_name'].isin(['tray', 'cup'])]
-        if bowls.empty or others.empty:
+        dishes = g[g['class_name'].isin(['plate', 'bowl'])]
+        trays, cups = g[g['class_name'] == 'tray'], g[g['class_name'] == 'cup']
+        if dishes.empty or (trays.empty and cups.empty):
             continue
-        hit = (_iou(bowls[['x1', 'y1', 'x2', 'y2']].to_numpy(float),
-                    others[['x1', 'y1', 'x2', 'y2']].to_numpy(float)) >= iou_thr).any(axis=1)
-        for index in bowls.index[hit]:
+        d = dishes[box].to_numpy(float)
+        hit = np.zeros(len(dishes), dtype=bool)
+        if len(trays):
+            t = trays[box].to_numpy(float)
+            cx, cy = (d[:, 0] + d[:, 2]) / 2, (d[:, 1] + d[:, 3]) / 2
+            inside = ((cx[:, None] >= t[None, :, 0]) & (cx[:, None] <= t[None, :, 2]) &
+                      (cy[:, None] >= t[None, :, 1]) & (cy[:, None] <= t[None, :, 3]))
+            hit |= (_iou(d, t) >= iou_thr).any(axis=1) | inside.any(axis=1)
+        if len(cups):
+            is_bowl = (dishes['class_name'] == 'bowl').to_numpy()
+            hit |= is_bowl & (_iou(d, cups[box].to_numpy(float)) >= iou_thr).any(axis=1)
+        for index in dishes.index[hit]:
             mask[position[index]] = True
     return mask
 
@@ -87,8 +100,8 @@ def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all'
 
     К каждому источнику применяются его пороги confidence, затем объекты
     одного счётчика в одной строке дедуплицируются по 9.2.6 (остаётся самый
-    уверенный), миски поверх подноса или чашки отбрасываются
-    (`overlapping_bowls`). Результат получает `source = name`, исходное имя источника
+    уверенный), тарелки и миски на подносе и миски-чашки отбрасываются
+    (`covered_dishes`). Результат получает `source = name`, исходное имя источника
     сохраняется в `origin`, число согласных источников в `n_src`.
     """
     from .assign import DEFAULTS as ASSIGN_DEFAULTS, _iou, dedup_objects
@@ -100,7 +113,7 @@ def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all'
     merged['origin'] = merged['source']
     small = {**ASSIGN_DEFAULTS['small'], **(cfg or {}).get('assign', {}).get('small', {})}
     kept = merged.loc[dedup_objects(merged, small)].copy()
-    kept = kept[~overlapping_bowls(kept, p['bowl_overlap_iou'])].copy()
+    kept = kept[~covered_dishes(kept, p['bowl_overlap_iou'])].copy()
     kept['n_src'] = 1
     if len(parts) > 1:
         groups = {key: g for key, g in merged.groupby(['row_id', 'dt', 'counter'], sort=False)}

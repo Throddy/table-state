@@ -1,0 +1,8 @@
+# Зависимости трека C (задачи C2 и C5) поверх requirements.txt ядра.
+# Проверено локально на CPU с этими версиями (Python 3.12):
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+# На Kaggle GPU torch и transformers берутся из образа (нужен transformers >= 4.40), версии не понижать.
+torch==2.15.0
+transformers==5.22.2
+huggingface_hub==2.4.0   # только для tracks/ov/fetch_weights.py
+scipy                    # ресайз в процессоре OWLv2

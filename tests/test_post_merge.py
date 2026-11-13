@@ -167,3 +167,21 @@ def test_bowl_over_tray_or_cup_is_not_counted():
     off = aggregate(merge_sources(parts, {'temporal': {'bowl_overlap_iou': None}}), {'source': 'all'}, rows)
     # без правила остаётся миска-чашка; миску на подносе и так убирает дедупликация 9.2.6 (один счётчик, IoU >= 0.5)
     assert off.loc['q1', 'all__dishes__cur'] == 3
+
+
+def test_plate_on_tray_is_not_counted():
+    rows = make_rows(dts=(0,))
+    prod = make_dets([('im_t', 'tray', 0.9, (150, 220, 230, 290))])
+    ov = other_source(make_dets([
+        ('im_t', 'plate', 0.8, (160, 230, 190, 260)),    # маленькая тарелка на подносе: IoU 0.16, но центр внутри
+        ('im_t', 'plate', 0.8, (205, 225, 265, 285)),    # наполовину на подносе: IoU 0.19, центр (235, 255) вне подноса
+        ('im_t', 'plate', 0.8, (100, 205, 130, 235)),    # отдельная тарелка
+        ('im_t', 'plate', 0.8, (400, 240, 430, 270)),    # стол без подноса
+    ]), 'ov_owl')
+    parts = [assign(prod, rows, {}), assign(ov, rows, {})]
+    f = aggregate(merge_sources(parts, {}), {'source': 'all'}, rows)
+    f['is_ir'] = 0.0
+    counts = stack.predict_counts(f, {'post': {'tray_mult': 2.0}})
+    assert counts['dishes'].to_dict() == {'q1': 4.0, 'q2': 1.0}     # 2 × поднос + 2 тарелки вне подноса; тарелка
+    off = aggregate(merge_sources(parts, {'temporal': {'bowl_overlap_iou': None}}), {'source': 'all'}, rows)
+    assert off.loc['q1', 'all__dishes__cur'] == 4                    # без правила: поднос + 3 тарелки

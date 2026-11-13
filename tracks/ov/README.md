@@ -19,3 +19,49 @@
 - `python -m ts.check dets <файл>` и `python -m ts.check rowfeats <файл>`: проверка формата перед публикацией артефакта.
 
 Зависимости трека кладутся в `tracks/ov/requirements.txt` (с точными версиями), модели в `MODELS.md`.
+
+## Запуск C2 и C5
+
+Текущее состояние, измерения, оставшиеся шаги и блокеры: [HANDOFF.md](HANDOFF.md).
+
+```bash
+pip install -r requirements.txt -r tracks/ov/requirements.txt
+python tracks/ov/fetch_weights.py                                  # один раз, с интернетом: веса в artifacts/models/
+python tracks/ov/run_ov.py --source ov_gdino --smoke 8             # короткая проверка, файлы удаляются
+python tracks/ov/run_ov.py --source ov_gdino --rows targets        # целевые кадры (dt = 0) -> dets/ov_gdino__v1
+python tracks/ov/run_ov.py --source ov_owl --rows targets --batch 2 --fp16      # -> dets/ov_owl__v1
+python tracks/ov/make_pseudo.py ov_gdino__v1 ov_owl__v1            # C5 -> labels/ov_pseudo__v1.parquet
+python tracks/ov/eval_dets.py ov_gdino__v1 ov_owl__v1 --rowfeats 1 # оценка на train и rowfeats/ov_counts__v1
+```
+
+- Инференс только на GPU: на CPU уходит 12–24 с на кроп. `run_ov.py` возобновляемый: при обрыве или после
+  `--max-minutes` повторить ту же команду.
+- `--rows targets`: 4964 кропа на модель (целевые кадры); `--rows all`: 10198 кропов, все 1718 кадров с соседями.
+- Отладка на train: `--rows train0 --version 91 --prompt-version 1`. Промпты: `prompts/*_v1.txt` … `*_v3.txt`,
+  таблица «понятие -> класс 8.2»: `CONCEPT_CLASS` в `run_ov.py`.
+- `eval_dets.py` это диагностика трека с временной привязкой; числа по контракту даёт стекер трека A.
+
+### Kaggle
+
+1. Datasets → New Dataset: загрузить `artifacts/kaggle/table-state-code.zip` (или архив своего коммита:
+   `git archive --format=zip --prefix=table-state/ -o table-state.zip HEAD`), сделать приватным.
+2. Code → New Notebook → File → Import Notebook: `tracks/ov/kaggle_c2_c5.ipynb`.
+3. Add Input: датасет соревнования и датасет с кодом. Settings: Accelerator `GPU T4 x2`, Internet `On`.
+4. В первой ячейке вписать `TS_GIT_SHA`. Выполнить ячейки 0–2 интерактивно, по таблицам выбрать `PROMPT_VERSION`.
+5. Поставить `RUN_TRAIN_COMPARE = False`, Save Version → Save & Run All.
+6. Из Output скачать `artifacts/labels/ov_pseudo__v1.*`, `artifacts/rowfeats/ov_counts__v1.*`, `artifacts/dets/ov_*__v1.*`;
+   Output сохранить как версию датасета команды. Каталог `artifacts/models` из Output сохранить как датасет с весами:
+   с ним следующие запуски идут без интернета.
+
+## TODO от ревью
+
+Замечания роли A по pull request #3 (C2 и C5), 13.11. PR влит, пункты не блокирующие, но их нужно закрыть до первого полного прогона.
+
+1. `make_pseudo.py`: добавить фильтр по дням, по умолчанию только 27–28.10, и записать дни в карточку. Сейчас боксы пишутся на всех кадрах входных файлов, включая 25–26.10, а пороги подбираются по счётчикам train. Утечки пока нет только потому, что `tracks/det/build_dataset.py` берёт псевдо-кадры тестовых дней.
+2. Карточка при прогоне `--rows targets` (839 целевых кадров) должна иметь `"coverage": "targets"`, а не `train_only`: в файле есть тестовые кадры. `ts.check` принимает `targets` при `frames_processed.n = 839`.
+3. В карточке указать, что источник посчитан только для `dt = 0`: контекстные признаки `prev/next/med` для него недоступны.
+4. Журнал трека: строки о C2 и C5 пишутся в `experiments/LOG_ov.md` (в общий `experiments/LOG.md` больше не пишем).
+5. Префикс коммитов по контракту `ov: ...`, а не `feat(ov): ...`. Перед следующим PR сделать `git pull`: ветка отставала от main, были конфликты в `MODELS.md` и в этом файле.
+6. `HANDOFF.md` устарел («файлы не закоммичены»): актуальное перенести сюда, файл удалить или обновить.
+7. Посуда: тарелка или миска, перекрытая подносом той же строки (IoU >= 0.3 или центр внутри бокса подноса), в dishes не считается, потому что поднос уже идёт с множителем 2 (`post.tray_mult`, подтверждено на Public). Это делает `ts.temporal`, в `run_ov.py` ничего фильтровать не нужно; при оценке в `eval_dets.py` сравнивать с базой «2 × подносы», а не «1 × подносы».
+8. Проверка источника делается одной командой роли A: `python tools/try_source.py --source ov_owl__v1 --cols dishes --base NB1 --name OV_dishes` (для вещей `--cols items`).

@@ -451,5 +451,6 @@
     },
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": 0.60308,
+  "public_lb_delta_vs_NB1": -0.04211
 }

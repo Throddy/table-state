@@ -25,6 +25,7 @@ CARD_REQUIRED = ['name', 'kind', 'owner', 'manual_labels_used', 'uses_train_coun
 TRAIN_PRED_MODES = {'zero_shot', 'oof_by_date'}
 DT_VALUES = {-30, 0, 30}
 N_FRAMES = 1718
+N_TARGET_FRAMES = 839    # целевые кадры (dt = 0): 39 train + 800 test
 N_ROWS = 4964
 
 
@@ -109,11 +110,13 @@ def check_dets(path) -> None:
     if dts - DT_VALUES:
         _fail(path, f'from_dt допускает только -30, 0, 30 или null, найдено {sorted(dts - DT_VALUES)}')
     card = _card(path, CARD_REQUIRED + ['coverage', 'frames_processed'])
-    if card['coverage'] not in ('all', 'train_only'):
-        _fail(path, "coverage в карточке: 'all' или 'train_only'")
+    if card['coverage'] not in ('all', 'targets', 'train_only'):
+        _fail(path, "coverage в карточке: 'all', 'targets' или 'train_only'")
     n = card['frames_processed'].get('n') if isinstance(card['frames_processed'], dict) else None
     if card['coverage'] == 'all' and n != N_FRAMES:
         _fail(path, f'coverage=all требует frames_processed.n = {N_FRAMES}, сейчас {n}')
+    if card['coverage'] == 'targets' and n != N_TARGET_FRAMES:
+        _fail(path, f'coverage=targets требует frames_processed.n = {N_TARGET_FRAMES} (все целевые кадры), сейчас {n}')
     if n is not None and df['frame_id'].nunique() > n:
         _fail(path, 'кадров с детекциями больше, чем frames_processed.n')
 
