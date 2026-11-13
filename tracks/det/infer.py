@@ -4,6 +4,7 @@
   coco_person  YOLO11x (COCO), класс person на полном кадре, imgsz 1280, все 1718 кадров (часть B6)
   coco_crop    YOLO11x (COCO), кропы top ×4 всех строк rows_ext, классы COCO -> словарь 8.2 таблицей
   ft_yolo      свой детектор (B4): кропы top ×4 всех строк rows_ext и полный кадр для людей
+  pose         YOLO11x-pose (B5): широкие кропы wide ×2.5 всех строк rows_ext, запястья в зоне top как hand
 
 Запуск (одна ячейка Kaggle на источник, сеть не нужна):
   python tracks/det/infer.py --source coco_person --weights <ts-models>/yolo11x.pt
@@ -34,6 +35,7 @@ import fetch_weights
 
 from ts import io, paths
 from ts.crops import crop_table, to_frame_coords
+from ts.geometry import zone
 from ts.rows import load_rows_ext
 
 # Классы COCO -> словарь 8.2. Счётные: cup, bowl, phone, bag, paper. Негативы: laptop, bottle, vase.
@@ -56,6 +58,7 @@ class Pass:
     imgsz: int                  # длинная сторона входа модели
     class_map: dict             # имя класса модели -> класс словаря 8.2
     scale: float = 1.0          # увеличение кропа
+    pose: bool = False          # pose-модель: запястья выдаются как детекции hand
 
 
 PROFILES: dict[str, list[Pass]] = {
@@ -63,8 +66,12 @@ PROFILES: dict[str, list[Pass]] = {
     'coco_crop': [Pass('top', 'top', 1024, COCO_CROP_MAP, scale=4.0)],
     'ft_yolo': [Pass('top', 'top', 1024, {c: c for c in FT_CLASSES if c != 'person'}, scale=4.0),
                 Pass('full', 'full', 1280, {'person': 'person'})],
+    'pose': [Pass('wide', 'wide', 1024, {'person': 'hand'}, scale=2.5, pose=True)],
 }
-CHUNK = {'full': 128, 'top': 512}
+CHUNK = {'full': 128, 'top': 512, 'wide': 512}
+HAND_BOX = 28.0          # B5: бокс 28×28 px кадра вокруг запястья
+FOREARM_SHIFT = 0.3      # B5: сдвиг на 0.3 длины предплечья в сторону от локтя
+WRISTS = {9: 7, 10: 8}   # ключевые точки COCO: запястье -> локоть той же руки
 
 
 def units_of(view: str, subset: str) -> pd.DataFrame:
@@ -114,6 +121,40 @@ def decode(result, unit, meta, p: Pass, names: dict) -> list[tuple]:
     return [(unit.frame_id, classes[i], float(conf[i]), *boxes[i].tolist(), row_id, dt) for i in keep]
 
 
+def decode_pose(result, unit, meta, p: Pass) -> list[tuple]:
+    """Запястья pose-модели на широком кропе -> детекции `hand` в координатах кадра (задача B5).
+
+    Бокс 28×28 px кадра вокруг запястья, сдвинутый на 0.3 длины предплечья в сторону от локтя.
+    Остаются только точки, попавшие в зону top стола строки. Confidence детекции это confidence
+    ключевой точки запястья. Локоть с confidence ниже порога записи сдвига не даёт.
+    """
+    if result.keypoints is None or result.keypoints.conf is None or not len(result.keypoints):
+        return []
+    xy = result.keypoints.xy.cpu().numpy().astype(float)        # (люди, 17, 2) в пикселях кропа
+    kc = result.keypoints.conf.cpu().numpy().astype(float)
+    top = zone((unit.x1, unit.y1, unit.x2, unit.y2), 'top', int(unit.slot))
+    boxes, conf = [], []
+    for person in range(len(xy)):
+        for wrist, elbow in WRISTS.items():
+            if kc[person, wrist] < CONF_MIN:
+                continue
+            w = to_frame_coords(np.concatenate([xy[person, wrist], xy[person, wrist]]), meta)[0, :2]
+            if kc[person, elbow] >= CONF_MIN:
+                e = to_frame_coords(np.concatenate([xy[person, elbow], xy[person, elbow]]), meta)[0, :2]
+                w = w + FOREARM_SHIFT * (w - e)
+            if not (top[0] <= w[0] <= top[2] and top[1] <= w[1] <= top[3]):
+                continue
+            boxes.append([w[0] - HAND_BOX / 2, w[1] - HAND_BOX / 2, w[0] + HAND_BOX / 2, w[1] + HAND_BOX / 2])
+            conf.append(min(1.0, float(kc[person, wrist])))
+    if not boxes:
+        return []
+    boxes, conf = common.clip_to_frame(np.array(boxes)), np.array(conf)
+    ok = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
+    boxes, conf = boxes[ok], conf[ok]
+    keep = common.nms_per_class(boxes, conf, np.array(['hand'] * len(boxes), dtype=object), NMS_IOU)
+    return [(unit.frame_id, 'hand', float(conf[i]), *boxes[i].tolist(), unit.row_id, int(unit.dt)) for i in keep]
+
+
 def run_pass(model, p: Pass, units: pd.DataFrame, store: PartStore, args) -> None:
     """Посчитать недостающие порции прохода."""
     names = model.names
@@ -139,7 +180,7 @@ def run_pass(model, p: Pass, units: pd.DataFrame, store: PartStore, args) -> Non
                                         classes=class_ids, agnostic_nms=False, max_det=args.max_det,
                                         device=args.device, quantize=16 if args.half else 32, verbose=False)
                 for unit, (_, meta), result in zip(batch, loaded, results):
-                    rows.extend(decode(result, unit, meta, p, names))
+                    rows.extend(decode_pose(result, unit, meta, p) if p.pose else decode(result, unit, meta, p, names))
             store.save(part, common.raw_table(rows), part_units['unit_id'].tolist())
             done_units += len(part_units)
             rate = (time.time() - started) / done_units
@@ -201,7 +242,7 @@ def main() -> None:
         units = units_of(p.view, args.subset)
         chunk = args.chunk or CHUNK[p.name]
         fingerprint = {'source': args.source, 'pass': p.name, 'view': p.view, 'scale': p.scale, 'imgsz': p.imgsz,
-                       'class_map': p.class_map, 'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half,
+                       'class_map': p.class_map, 'pose': p.pose, 'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half,
                        'max_det': args.max_det, 'weights_sha256': weights_sha, 'ultralytics': ultralytics_version,
                        'chunk': chunk, 'units': {'n': len(units), 'sha1': common.sha1_ids(units['unit_id'])}}
         store = PartStore(parts_root / p.name, fingerprint)
