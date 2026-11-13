@@ -41,7 +41,7 @@ assign:
 # Фильтры и контекст (раздел 10, ts.temporal).
 temporal:
   min_conf: {}                 # {counter: порог} или {source: {counter: порог}}
-  people_max_area: 45000       # px²; крупнее = идущий или стоящий в проходе. Подгоняется на train (ts.stack.tune_people_area)
+  people_max_area: null        # фильтр площади бокса person выключен: на Public он вреден (R1b 0.580 против R1c 0.600)
   people_rescue: true
   # исключения из фильтра площади; на train не срабатывают, выключены (см. experiments/LOG_core.md)
   people_big_keep_with_hand: false
@@ -53,7 +53,7 @@ stack:
   # cur = текущий кадр, med = правило раздела 10. Для cups med на train хуже на 1 строку, поэтому пока cur.
   counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: null}
   people_fill: true            # people из соседей, если сейчас 0, у соседей одинаково и есть руки
-  tune_people_area: true
+  tune_people_area: false      # порог площади не подбирается, см. temporal.people_max_area
   tune_conf: true              # пороги confidence источников, кроме prod: по одному на (источник, счётчик)
   # голосование с признаками строк: {counter: {column: vlm_qwen__items, mode: median | replace | max}}
   vote: {}
