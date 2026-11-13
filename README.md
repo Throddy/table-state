@@ -63,6 +63,15 @@ python tracks/core/build_pred.py --name <name> [--config configs/default.yaml]
 # абляция «минус один источник» и проверка отдельных параметров (честный out-of-fold по дням)
 python tools/ablate.py [--set post.items_prior=false] [--set temporal.people_max_area=36000]
 
+# абляция заменой колонок: базовый файл с отдельными колонками из другого предсказания, затем gate (раздел 12.5)
+python tools/swap_cols.py --base base_calibrated --donor R1c --cols occ_prob --name AB_occ
+
+# новый источник одной командой: ts.check -> привязка -> счётчики -> замена колонок в базовом файле -> gate
+python tools/try_source.py --source coco_person__v1 --cols people --base <лучший файл> --name AB_people_coco
+
+# три журнала одной таблицей
+python tools/log_all.py --tail 30
+
 # гистограммы площади боксов person -> report/person_area_hist.png
 python tools/person_area_hist.py
 
@@ -96,7 +105,8 @@ out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать арт
 1. Положить файл и карточку в `artifacts/dets/<source>__v<N>.parquet` или `artifacts/rowfeats/<source>__v<N>.parquet`.
 2. Проверить: `python -m ts.check dets artifacts/dets/<source>__v<N>.parquet` (или `rowfeats`).
 3. Дописать имя без расширения в `sources.dets` или `sources.rowfeats` в `configs/default.yaml`. Для счётчика, который раньше был нулевым (items), включить его в `stack.counts` (`items: cur`); для признаков строк задать `stack.vote`.
-4. `python tools/ablate.py` покажет полную сборку и варианты без каждого источника. Пороги confidence нового источника (по одному на счётчик) подбираются на дне подгонки автоматически.
+4. Быстрый путь: `python tools/try_source.py --source <source>__v<N> --cols <колонки> --base <лучший файл> --name AB_<...>` делает шаги 2–3 во временном конфиге, собирает предсказание и подставляет указанные колонки в базовый файл (проверка по 12.5).
+   `python tools/ablate.py` покажет полную сборку и варианты без каждого источника. Пороги confidence нового источника (по одному на счётчик) подбираются на дне подгонки автоматически.
 5. Принять источник по правилу 12.3, собрать `python tracks/core/build_pred.py --name S<N>` и записать строку в журнал.
 
 ## Структура
