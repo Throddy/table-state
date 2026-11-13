@@ -23,4 +23,4 @@ def git_sha() -> tuple[str, bool]:
     """Короткий sha текущего коммита и признак незакоммиченных изменений."""
     def run(*args: str) -> str:
         return subprocess.run(['git', *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
-    return run('rev-parse', '--short', 'HEAD') or 'no-commit', bool(run('status', '--porcelain'))
+    return run('rev-parse', '--short', 'HEAD') or 'no-commit', bool(run('status', '--porcelain', '--untracked-files=no'))
