@@ -100,6 +100,12 @@ out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать арт
 Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack, post`.
 Заглушка: `viz`.
 
+## Текущая основа
+
+`NB1` (Public 0.64519) = бейзлайн организаторов + `people` с добором по нижней трети бокса. Собирается по `configs/default.yaml`:
+блок `compose` говорит, какая колонка берётся из своей сборки (`stack`), а какая из бейзлайна (`baseline`), `post.tray_mult` задаёт множитель подносов для dishes.
+Колонка меняется только после проверки заменой на Public (раздел 12.5 контракта).
+
 ## Как подключить новый источник (делает A)
 
 1. Положить файл и карточку в `artifacts/dets/<source>__v<N>.parquet` или `artifacts/rowfeats/<source>__v<N>.parquet`.

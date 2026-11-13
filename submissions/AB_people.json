@@ -387,5 +387,6 @@
     },
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": 0.64519,
+  "public_lb_delta_vs_base_calibrated": 0.00552
 }

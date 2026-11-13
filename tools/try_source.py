@@ -48,6 +48,7 @@ def main() -> None:
     print(f'ts.check: {args.source} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
     cfg['sources']['dets'] = [args.source] if args.alone else ['prod', args.source]
+    cfg['compose'] = {**(cfg.get('compose') or {}), **{column: 'stack' for column in args.cols}}
     for counter in args.cols:
         if counter in COUNTS and not cfg['stack']['counts'].get(counter):
             cfg['stack']['counts'][counter] = 'cur'      # счётчик, который раньше был нулевым (items)
