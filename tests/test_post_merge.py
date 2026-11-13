@@ -137,3 +137,33 @@ def test_compose_takes_baseline_columns():
     assert (pred['people'] >= raw['det_people']).all()              # добор только добавляет людей
     with pytest.raises(ValueError, match='compose'):
         stack.make_fit_predict({**cfg, 'compose': {'people': 'magic'}})(fit, tables[tables.row_id.isin(val.row_id)])
+
+
+def test_rescue_pick_prefers_horizontally_nearest_table():
+    wide, narrow = (100.0, 200.0, 300.0, 300.0), (320.0, 200.0, 360.0, 300.0)   # второй стол узкий, как обрезанный краем
+    rows = make_rows(dts=(0,), tables=(wide, narrow))
+    person = make_dets([('im_t', 'person', 0.9, (290, 100, 340, 220))])   # нижняя треть: x 290..340, центр 315
+    by_share = assign(person, rows, {'assign': {'people': {'rescue_pick': 'share'}}})
+    by_distance = assign(person, rows, {})
+    assert by_share.row_id.tolist() == ['q1'] and by_share.rule.tolist() == ['rescue']
+    assert by_distance.row_id.tolist() == ['q2'] and by_distance.rule.tolist() == ['rescue']
+    inside = make_dets([('im_t', 'person', 0.9, (150, 100, 250, 220))])   # центр внутри рамки первого стола
+    assert assign(inside, rows, {}).row_id.tolist() == ['q1']
+
+
+def test_bowl_over_tray_or_cup_is_not_counted():
+    rows = make_rows(dts=(0,))
+    prod = make_dets([('im_t', 'tray', 0.9, (150, 220, 210, 280)), ('im_t', 'cup', 0.9, (240, 230, 268, 258))])
+    coco = other_source(make_dets([
+        ('im_t', 'bowl', 0.8, (155, 225, 205, 275)),     # на подносе: IoU 0.69
+        ('im_t', 'bowl', 0.8, (242, 232, 270, 260)),     # это чашка: IoU 0.76
+        ('im_t', 'bowl', 0.8, (110, 210, 140, 240)),     # отдельная миска
+    ]), 'coco_crop')
+    parts = [assign(prod, rows, {}), assign(coco, rows, {})]
+    f = aggregate(merge_sources(parts, {}), {'source': 'all'}, rows)
+    f['is_ir'] = 0.0
+    assert f.loc['q1', 'all__dishes__cur'] == 2                                      # поднос + одна миска
+    assert stack.predict_counts(f, {'post': {'tray_mult': 2.0}}).loc['q1', 'dishes'] == 3   # 2 × поднос + миска
+    off = aggregate(merge_sources(parts, {'temporal': {'bowl_overlap_iou': None}}), {'source': 'all'}, rows)
+    # без правила остаётся миска-чашка; миску на подносе и так убирает дедупликация 9.2.6 (один счётчик, IoU >= 0.5)
+    assert off.loc['q1', 'all__dishes__cur'] == 3
