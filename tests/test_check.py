@@ -105,6 +105,10 @@ def test_dets_broken(tmp_path, dets, breaker, message):
 def test_dets_card_rules(tmp_path, dets):
     with pytest.raises(CheckError, match='R7'):
         check_dets(save_dets(tmp_path, dets, manual_labels_used=True))
+    on_targets = dets[dets.frame_id.isin(io.load_tables().frame_id)]
+    check_dets(save_dets(tmp_path, on_targets, coverage='targets', frames_processed={'n': 839, 'sha1': 'x'}))
+    with pytest.raises(CheckError, match='839'):
+        check_dets(save_dets(tmp_path, on_targets, coverage='targets', frames_processed={'n': 39, 'sha1': 'x'}))
     with pytest.raises(CheckError, match='1718'):
         check_dets(save_dets(tmp_path, dets, frames_processed={'n': 39, 'sha1': 'x'}))
     path = tmp_path / 'nocard__v1.parquet'
