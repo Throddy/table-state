@@ -57,8 +57,14 @@ python tools/contact_sheet.py [--frames im_...] [--context]
 # опорное предсказание бейзлайна организаторов (режим calibrated)
 python tracks/core/base_calibrated.py
 
-# R1: прод-детекции, привязка v2, контекст, мягкий occ_prob
-python tracks/core/r1.py
+# сборка предсказания по конфигу (источники из sources, привязка, контекст, стекер, постобработка)
+python tracks/core/build_pred.py --name <name> [--config configs/default.yaml]
+
+# абляция «минус один источник» и проверка отдельных параметров (честный out-of-fold по дням)
+python tools/ablate.py [--set post.items_prior=false] [--set temporal.people_max_area=36000]
+
+# гистограммы площади боксов person -> report/person_area_hist.png
+python tools/person_area_hist.py
 
 # проверка и регистрация сабмита (только роль A, на Kaggle не отправляет)
 python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
@@ -82,8 +88,16 @@ boxes_frame = to_frame_coords(boxes, meta)
 out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать артефакт
 ```
 
-Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack`.
-Заглушки: `post, viz`.
+Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack, post`.
+Заглушка: `viz`.
+
+## Как подключить новый источник (делает A)
+
+1. Положить файл и карточку в `artifacts/dets/<source>__v<N>.parquet` или `artifacts/rowfeats/<source>__v<N>.parquet`.
+2. Проверить: `python -m ts.check dets artifacts/dets/<source>__v<N>.parquet` (или `rowfeats`).
+3. Дописать имя без расширения в `sources.dets` или `sources.rowfeats` в `configs/default.yaml`. Для счётчика, который раньше был нулевым (items), включить его в `stack.counts` (`items: cur`); для признаков строк задать `stack.vote`.
+4. `python tools/ablate.py` покажет полную сборку и варианты без каждого источника. Пороги confidence нового источника (по одному на счётчик) подбираются на дне подгонки автоматически.
+5. Принять источник по правилу 12.3, собрать `python tracks/core/build_pred.py --name S<N>` и записать строку в журнал.
 
 ## Структура
 
