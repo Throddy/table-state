@@ -1,0 +1,6 @@
+# Рецепт сабмита: базовый файл и колонки, заменённые из другого предсказания.
+swap:
+  base: AB_people
+  donor: AB_ft_hands__src
+  cols:
+  - hands
