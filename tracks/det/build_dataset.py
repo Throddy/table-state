@@ -3,7 +3,8 @@
 Источники боксов:
   1. aux как есть (aux_boxes.csv, маппинг 8.2);
   2. прод-детекции с confidence >= 0.6 (person, hand, cup, tray) на кадрах выбранных дней;
-  3. уверенные детекции трека C из задачи C5 (plate, phone): ART/labels/ov_pseudo__v<N>.parquet или --ov-pseudo;
+  3. уверенные детекции трека C из задачи C5 (tray, phone, plate, что есть в файле): ART/labels/ov_pseudo__v<N>.parquet
+     или --ov-pseudo;
   4. только для v2 (B7): уверенные предсказания своего детектора v1 (--ft-pseudo ft_yolo__v1), confidence >= 0.6.
 Других источников нет. Боксы одного объекта из разных источников сливаются по правилу 9.2.6 контракта.
 
@@ -15,7 +16,8 @@
 
 Запуск:
   v1: python tracks/det/build_dataset.py --name ft_data_v1 --classes v1 --pseudo-step 2
-  v2: python tracks/det/build_dataset.py --name ft_data_v2 --classes v2 --pseudo-step 2 --ft-pseudo ft_yolo__v1
+  v2: python tracks/det/build_dataset.py --name ft_data_v2 --classes auto --pseudo-step 2 --ft-pseudo ft_yolo__v1
+      (набор классов v2: классы v1 и те из phone, plate, для которых в файле трека C есть боксы)
 По умолчанию псевдометки берутся только с кадров 27–28.10: кадры 25–26.10 в обучение не идут,
 поэтому правило 12.4 не применяется. Результат: ART/datasets/<name>/ (images, labels, data.yaml,
 manifest.csv, card.json, preview.jpg).
@@ -33,7 +35,7 @@ import pandas as pd
 from PIL import Image, ImageDraw
 
 import common
-from common import CLASS_SETS, TEST_DATES
+from common import CLASS_SETS, OV_EXTRA, TEST_DATES
 
 from ts import FRAME_H, FRAME_W, SEED, io, paths
 from ts.crops import crop_region, to_crop_coords
@@ -42,7 +44,7 @@ from ts.slots import slot_of
 
 VIEWS = {'full': None, 'top': 4.0, 'wide': 2.5}     # вид -> увеличение кропа (раздел 9.1)
 PROD_CLASSES = ['person', 'hand', 'cup', 'tray']     # что берём из прод-детектора
-OV_CLASSES = ['plate', 'phone']                      # что берём из псевдометок трека C (задача C5)
+OV_CLASSES = ['tray', *OV_EXTRA]                     # что берём из псевдометок трека C (задача C5), если это есть в файле
 PSEUDO_CONF = 0.6                                    # B3: уверенные детекции идут в метки
 UNSURE_MIN = 0.2                                     # B3: 0.2–0.6 закрашивается, ниже 0.2 не учитывается
 DEDUP_IOU, DEDUP_SMALL_PX, DEDUP_CENTER = 0.5, 40.0, 0.5   # правило 9.2.6: один и тот же объект
@@ -290,13 +292,12 @@ def preview(out: Path, manifest: pd.DataFrame, classes: list[str], n: int = 10) 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--name', default='ft_data_v1', help='каталог ART/datasets/<name>')
-    parser.add_argument('--classes', choices=sorted(CLASS_SETS), default='v1', help='набор классов: v1 (4) или v2 (8)')
+    parser.add_argument('--classes', choices=[*sorted(CLASS_SETS), 'auto'], default='v1',
+                        help='v1: person, hand, cup, tray; auto (v2): классы v1 и те из phone, plate, что есть в файле трека C')
     parser.add_argument('--pseudo-dates', nargs='*', default=list(TEST_DATES),
                         help='дни UTC, с которых берутся псевдометки (по умолчанию 27–28.10; пусто = только aux)')
     parser.add_argument('--ov-pseudo', default=None,
                         help='файл псевдометок трека C (путь или имя в ART/labels); по умолчанию последний ov_pseudo__v*.parquet')
-    parser.add_argument('--allow-missing-ov', action='store_true',
-                        help='собрать v2 без псевдометок трека C (plate и phone тогда только из aux)')
     parser.add_argument('--ft-pseudo', default=None,
                         help='детекции своего детектора прошлой версии (путь или имя в ART/dets), источник меток для v2')
     parser.add_argument('--bg-frac', type=float, default=0.1,
@@ -307,16 +308,31 @@ def main() -> None:
     args = parser.parse_args()
 
     common.require_data()
-    classes = CLASS_SETS[args.classes]
     out = paths.ART / 'datasets' / args.name
     if out.exists():
         raise SystemExit(f'{out} уже существует. Датасет неизменяем: выберите другое --name.')
-    ov_classes = [c for c in OV_CLASSES if c in classes]
-    ov_path = dets_file(args.ov_pseudo, 'labels', 'ov_pseudo__v*.parquet') if ov_classes else None
-    if ov_classes and ov_path is None and not args.allow_missing_ov:
-        raise SystemExit('Для набора классов с plate и phone нужен файл псевдометок трека C (задача C5): '
-                         'положите ART/labels/ov_pseudo__v<N>.parquet или укажите --ov-pseudo. '
-                         'Без него plate и phone на псевдо-кадрах останутся без меток (--allow-missing-ov).')
+    frames = io.load_frames()
+    pseudo = frames[frames['date_utc'].isin(args.pseudo_dates)].sort_values('ts')
+    # эпизод это цепочка кадров с шагом 30 с; соседние кадры почти дубликаты, поэтому можно брать каждый N-й
+    episode = (pseudo['ts'].diff().dt.total_seconds().fillna(1e9) > NEAR_SECONDS + 5).cumsum()
+    pseudo_ids = sorted(pseudo.loc[pseudo.groupby(episode).cumcount() % args.pseudo_step == 0, 'frame_id'])
+
+    ov_path = dets_file(args.ov_pseudo, 'labels', 'ov_pseudo__v*.parquet') if (args.classes == 'auto' or args.ov_pseudo) else None
+    ov_found: dict[str, int] = {}
+    if ov_path is not None:
+        ov_all = pd.read_parquet(ov_path)
+        ov_found = {str(c): int(n) for c, n in ov_all.loc[ov_all['frame_id'].isin(pseudo_ids), 'class_name']
+                    .value_counts().sort_index().items()}
+    if args.classes == 'auto':
+        if ov_path is None:
+            raise SystemExit('Для --classes auto нужен файл псевдометок трека C (задача C5): положите '
+                             'ART/labels/ov_pseudo__v<N>.parquet или укажите --ov-pseudo.')
+        classes = CLASS_SETS['v1'] + [c for c in OV_EXTRA if ov_found.get(c, 0) > 0]
+    else:
+        classes = CLASS_SETS[args.classes]
+    ov_classes = [c for c in OV_CLASSES if c in classes and ov_found.get(c, 0) > 0]
+    print(f'классы датасета ({args.classes}): {classes}')
+    print(f'файл трека C: {ov_path}; классы на псевдо-кадрах: {ov_found or "нет"}; берём: {ov_classes or "ничего"}')
     ft_path = dets_file(args.ft_pseudo, 'dets', '') if args.ft_pseudo else None
 
     # 1. aux: holdout и обучение
@@ -335,11 +351,6 @@ def main() -> None:
                           'confident': none}
 
     # 2. псевдометки: уверенные детекции источников идут в метки, неуверенные области под закраску
-    frames = io.load_frames()
-    pseudo = frames[frames['date_utc'].isin(args.pseudo_dates)].sort_values('ts')
-    # эпизод это цепочка кадров с шагом 30 с; соседние кадры почти дубликаты, поэтому можно брать каждый N-й
-    episode = (pseudo['ts'].diff().dt.total_seconds().fillna(1e9) > NEAR_SECONDS + 5).cumsum()
-    pseudo_ids = sorted(pseudo.loc[pseudo.groupby(episode).cumcount() % args.pseudo_step == 0, 'frame_id'])
     prod = io.load_prod_dets()
     prod_labels = prod[prod['class_name'].isin([c for c in PROD_CLASSES if c in classes]) & prod['frame_id'].isin(pseudo_ids)]
     prod_labels = prod_labels.assign(src='prod')[LABEL_COLUMNS]
@@ -407,7 +418,7 @@ def main() -> None:
                     'note': 'aux_boxes.csv как есть, без правок'},
             'prod': {'classes': PROD_CLASSES, 'min_confidence': PSEUDO_CONF, 'candidates': int(len(prod_labels))},
             'ov_pseudo': {'file': None if ov_path is None else ov_path.name, 'classes': ov_classes,
-                          'candidates': int(len(ov))},
+                          'classes_in_file_on_pseudo_frames': ov_found, 'candidates': int(len(ov))},
             'ft': {'file': None if ft_path is None else ft_path.name, 'min_confidence': PSEUDO_CONF,
                    'painted_from': UNSURE_MIN, 'candidates': int(len(ft))},
             'pseudo_frames': len(pseudo_ids),

@@ -23,7 +23,7 @@ import pandas as pd
 import yaml
 
 import common
-from common import CLASS_SETS, TRAIN_DATES
+from common import CLASS_SETS, OV_EXTRA, TRAIN_DATES
 import fetch_weights
 
 from ts import SEED, paths
@@ -87,9 +87,11 @@ def main() -> None:
 
     data_dir = args.data.resolve()
     data_card = json.loads((data_dir / 'card.json').read_text(encoding='utf-8'))
-    classes = CLASS_SETS[cfg['classes']]
-    if data_card.get('manual_labels_used') or data_card['classes'] != classes:
-        raise SystemExit(f"Датасет не подходит: ручные метки или список классов не {cfg['classes']} ({classes}).")
+    base = CLASS_SETS['v1']
+    classes = list(data_card['classes'])
+    allowed = base if cfg['classes'] == 'v1' else base + [c for c in OV_EXTRA if c in classes]
+    if data_card.get('manual_labels_used') or classes != allowed:
+        raise SystemExit(f"Датасет не подходит: ручные метки или классы {classes} вместо {allowed} (режим {cfg['classes']}).")
     if args.weights.name != cfg['base_weights']:
         raise SystemExit(f"Конфиг требует стартовые веса {cfg['base_weights']}, передан {args.weights.name}.")
     base_model = fetch_weights.model_ref(args.weights)      # сверяет sha256 с зафиксированным

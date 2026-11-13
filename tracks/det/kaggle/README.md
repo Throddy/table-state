@@ -19,7 +19,7 @@
 | `det_coco_sources.ipynb` | `infer.py --source coco_person`, `infer.py --source coco_crop` | `dets/coco_person__v1.*`, `dets/coco_crop__v1.*` |
 | `det_train_ft_yolo.ipynb` | `build_dataset.py --classes v1`, `train.py`, `infer.py --source ft_yolo --half` | `datasets_ft_data_v1.zip`, `models/ft_yolo_v1/`, `dets/ft_yolo__v1.*` |
 | `det_ft_yolo_tta.ipynb` | `infer.py --source ft_yolo --tta --half` | `dets/ft_yolo_tta__v1.*` |
-| `det_train_ft_yolo_v2.ipynb` | `build_dataset.py --classes v2`, `train.py`, `infer.py --source ft_yolo --version 2 --half` | `datasets_ft_data_v2.zip`, `models/ft_yolo_v2/`, `dets/ft_yolo__v2.*` |
+| `det_train_ft_yolo_v2.ipynb` | `build_dataset.py --classes auto`, `train.py`, `infer.py --source ft_yolo --version 2 --half` | `datasets_ft_data_v2.zip`, `models/ft_yolo_v2/`, `dets/ft_yolo__v2.*` |
 | `det_pose.ipynb` | `infer.py --source pose` (источник выключен решением A, оставлен для воспроизводимости журнала) | `dets/pose__v1.*` |
 
 Первая ячейка всех ноутбуков находит входы по содержимому (слаги не зашиты), копирует код в
@@ -35,10 +35,10 @@ python tracks/det/train.py --config tracks/det/configs/ft_yolo_v1.yaml \
     --data $TS_ARTIFACTS/datasets/ft_data_v1 --weights <ts-models>/yolo11m.pt --hours 2.7
 ```
 
-Обучение v2 (8 классов, самообучение, задача B7):
+Обучение v2 (самообучение, задача B7; классы v1 и те из phone, plate, что есть в файле трека C):
 
 ```bash
-python tracks/det/build_dataset.py --name ft_data_v2 --classes v2 --pseudo-step 2 \
+python tracks/det/build_dataset.py --name ft_data_v2 --classes auto --pseudo-step 2 \
     --ft-pseudo <путь>/ft_yolo__v1.parquet --ov-pseudo <путь>/ov_pseudo__v1.parquet
 python tracks/det/train.py --config tracks/det/configs/ft_yolo_v2.yaml \
     --data $TS_ARTIFACTS/datasets/ft_data_v2 --weights <ts-models>/yolo11m.pt --hours 2.7
