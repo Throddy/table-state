@@ -102,3 +102,38 @@ def test_vote_with_rowfeats():
     counts = stack.predict_counts(f, cfg)
     assert counts['cups'].tolist() == [1, 2, 1]      # b: ответа VLM нет, остаётся детектор
     assert counts['items'].tolist() == [2, 0, 1]
+
+
+def test_tray_mult_counts_trays_extra():
+    rows = make_rows(dts=(0,))
+    dets = make_dets([('im_t', 'tray', 0.9, (150, 220, 210, 280)), ('im_t', 'tray', 0.9, (220, 220, 280, 280)),
+                      ('im_t', 'plate', 0.9, (400, 240, 430, 270))])
+    f = aggregate(merge_sources([assign(dets, rows, {})], {}), {'source': 'all'}, rows)
+    f['is_ir'] = 0.0
+    assert f['all__tray__cur'].to_dict() == {'q1': 2.0, 'q2': 0.0}
+    assert stack.predict_counts(f, {})['dishes'].to_dict() == {'q1': 2.0, 'q2': 1.0}
+    assert stack.predict_counts(f, {'post': {'tray_mult': 2.0}})['dishes'].to_dict() == {'q1': 4.0, 'q2': 1.0}
+    assert stack.predict_counts(f, {'post': {'tray_mult': 3.0}})['dishes'].to_dict() == {'q1': 6.0, 'q2': 1.0}
+
+
+def test_compose_takes_baseline_columns():
+    from conftest import HAS_DATA
+    if not HAS_DATA:
+        pytest.skip('нет каталога данных TS_DATA')
+    from ts import io, orgbase
+    labels = io.load_labels()
+    fit, val = labels[labels.date_utc == '2026-10-25'], labels[labels.date_utc == '2026-10-26']
+    cfg = {'sources': {'dets': ['prod'], 'rowfeats': []}, 'post': {'tray_mult': 2.0},
+           'compose': {'people': 'stack', 'dishes': 'stack', 'hands': 'baseline', 'cups': 'baseline',
+                       'items': 'baseline', 'occ_prob': 'baseline'}}
+    tables = io.load_tables()
+    pred = stack.make_fit_predict(cfg)(fit, tables[tables.row_id.isin(val.row_id)]).set_index('row_id')
+    base = orgbase.calibrated(fit, list(pred.index)).set_index('row_id')
+    for column in ['hands', 'cups', 'items']:
+        assert (pred[column] == base[column]).all()
+    assert np.allclose(pred['occ_prob'], base['occ_prob'], atol=1e-12)
+    raw = orgbase.features().loc[pred.index]
+    assert (pred['dishes'] == 2 * raw['det_dishes']).all()          # подносы × 2
+    assert (pred['people'] >= raw['det_people']).all()              # добор только добавляет людей
+    with pytest.raises(ValueError, match='compose'):
+        stack.make_fit_predict({**cfg, 'compose': {'people': 'magic'}})(fit, tables[tables.row_id.isin(val.row_id)])

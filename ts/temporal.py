@@ -143,4 +143,8 @@ def aggregate(assigned: pd.DataFrame, cfg: dict, rows: pd.DataFrame | None = Non
             out[prefix + 'conf_max'], out[prefix + 'conf_sum'] = conf['max'].to_numpy(), conf['sum'].to_numpy()
         except KeyError:
             out[prefix + 'conf_max'], out[prefix + 'conf_sum'] = 0.0, 0.0
+    # число подносов на текущем кадре отдельно: для правила post.tray_mult (ts.stack.predict_counts)
+    trays = (kept[(kept['dt'] == 0) & (kept['class_name'] == 'tray')].groupby('row_id').size()
+             if len(kept) and 'class_name' in kept else pd.Series(dtype=float))
+    out[f'{source}__tray__cur'] = trays.reindex(out.index, fill_value=0).to_numpy(float)
     return out

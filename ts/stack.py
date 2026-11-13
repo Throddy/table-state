@@ -40,6 +40,13 @@ def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     for counter in COUNTS:
         column = p['counts'].get(counter)
         out[counter] = features[f'{src}__{counter}__{column}'].to_numpy(float) if column else 0.0
+    # Множитель подносов (post.tray_mult): dishes = тарелки + миски + tray_mult · подносы.
+    # Пока тарелок никто не детектирует, множитель 2 заменяет их (поднос обычно несёт посуду); когда
+    # появятся детекции plate и bowl, множитель ставится в 1 и остаётся запасным вариантом.
+    tray_mult = float((cfg or {}).get('post', {}).get('tray_mult') or 1.0)
+    tray_column = f'{src}__tray__cur'
+    if tray_mult != 1.0 and p['counts'].get('dishes') and tray_column in features:
+        out['dishes'] = out['dishes'] + (tray_mult - 1.0) * features[tray_column].to_numpy(float)
     for counter, rule in (p['vote'] or {}).items():
         column, mode = rule['column'], rule.get('mode', 'median')
         value = features[column].to_numpy(float)
@@ -187,6 +194,8 @@ def make_fit_predict(cfg: dict, log: list | None = None):
 
     На строках подгонки: пороги confidence новых источников, порог площади
     бокса человека, логрег занятости. Затем предсказание и `ts.post.apply`.
+    Колонки, для которых в `cfg['compose']` указано `baseline`, заменяются
+    колонками бейзлайна организаторов (`ts.orgbase`), подогнанного на тех же строках.
     В `log` дописываются подобранные параметры каждого вызова.
     """
     from . import post
@@ -219,8 +228,18 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                         'people_max_area': local['temporal'].get('people_max_area'),
                         'min_conf': local['temporal'].get('min_conf', {}),
                         'occ_coef': model.get('coef'), 'occ_intercept': model.get('intercept')})
-        pred = predict(model, features.loc[predict_rows['row_id']], local)
-        return post.apply(pred, local)
+        pred = post.apply(predict(model, features.loc[predict_rows['row_id']], local), local)
+        compose = cfg.get('compose') or {}
+        unknown = set(compose.values()) - {'stack', 'baseline'}
+        if unknown:
+            raise ValueError(f'compose: неизвестный источник колонки {sorted(unknown)}, допустимы stack и baseline')
+        from_baseline = [c for c, origin in compose.items() if origin == 'baseline']
+        if from_baseline:
+            from . import orgbase
+            base = orgbase.calibrated(train_rows, pred['row_id'].tolist()).set_index('row_id').loc[pred['row_id']]
+            for column in from_baseline:
+                pred[column] = base[column].to_numpy(float)
+        return pred
 
     fit_predict.n_params = None
     return fit_predict

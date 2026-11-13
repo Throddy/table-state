@@ -25,6 +25,18 @@ crops:
 rows:
   ir_saturation_threshold: 0.05   # is_ir = 1, если средняя насыщенность HSV ниже порога
 
+# Откуда берётся каждая колонка итогового предсказания (раздел 12.5: колонка меняется только после
+# проверки заменой на Public). stack = своя сборка (ts.stack), baseline = бейзлайн организаторов
+# (data/baseline.py, режим calibrated, подгоняется на тех же строках).
+# Сборка NB1 (Public 0.64519): бейзлайн + people с добором по нижней трети.
+compose:
+  people: stack        # +0.035 к качеству people на Public (AB_people)
+  hands: baseline      # своя привязка на Public не отличается (AB_hands)
+  cups: baseline
+  dishes: stack        # подносы × post.tray_mult; при tray_mult = 2 совпадает с бейзлайном на тесте
+  items: baseline      # приор items = 1 на Public чуть хуже модели бейзлайна (AB_items)
+  occ_prob: baseline   # AP на Public одинаков (AB_occ), остаётся вариант бейзлайна
+
 # Привязка объектов к столам (раздел 9, ts.assign).
 assign:
   small:
@@ -66,5 +78,10 @@ post:
   round_counts: false
   clip: true
   empty_night: false
-  items_prior: true            # people >= 1 и items = 0 -> items = 1, пока источников items нет
+  items_prior: false           # people >= 1 и items = 0 -> items = 1; на Public −0.003 против модели бейзлайна (AB_items)
   items_prior_floor: false     # приор как нижняя граница при наличии источников items; включать после проверки 12.3
+  # dishes = тарелки + миски + tray_mult · подносы. Сейчас тарелок никто не детектирует, множитель 2
+  # (подогнанный масштаб бейзлайна) даёт +0.26 к качеству dishes на Public (AB_dishes). Когда придут
+  # детекции plate и bowl от трека C: добавить источник в sources.dets, поставить tray_mult: 1.0 и
+  # сравнить заменой колонки; множитель остаётся запасным вариантом.
+  tray_mult: 2.0
