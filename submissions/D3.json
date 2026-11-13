@@ -1,0 +1,455 @@
+{
+  "name": "D3",
+  "created_utc": "2026-11-13T20:36:39Z",
+  "git_sha": "039593a",
+  "git_dirty": false,
+  "note": "Множитель подносов 3 вместо 2: растёт ли качество dishes на Public дальше (2 дало +0.26 против 1)?",
+  "command": "python tools/submit_gate.py --pred artifacts/preds/D3.csv --config configs/D3.yaml --brief --note Множитель подносов 3 вместо 2: растёт ли качество dishes на Public дальше (2 дало +0.26 против 1)?",
+  "pred": "artifacts/preds/D3.csv",
+  "pred_sha256": "27c1f5fc1b5731ed166348e4f2928cfd6bc0dee1ce895b165146df29ffb99e6f",
+  "submission_sha256": "620299295e149197ad6ea9660a475e7af5d0cf827a821e66df3b0c836720420e",
+  "rows": 4733,
+  "occ_prob_unique": 854,
+  "config": "configs/submissions/D3.yaml",
+  "sources": [
+    "prod"
+  ],
+  "pred_card": {
+    "name": "D3",
+    "kind": "preds",
+    "owner": "A",
+    "created_utc": "2026-11-13T20:36:37Z",
+    "git_sha": "039593a",
+    "command": "python tracks/core/build_pred.py --name D3 --config configs/D3.yaml",
+    "models": [],
+    "inputs": [
+      "rows_ext.parquet",
+      "train_labels.csv",
+      "prod"
+    ],
+    "sources": [
+      "prod"
+    ],
+    "train_pred": "oof_by_date",
+    "manual_labels_used": false,
+    "uses_train_counters": true,
+    "n_params": 8,
+    "post": {
+      "hands_need_people": false,
+      "hands_cap": false,
+      "round_counts": false,
+      "clip": true,
+      "empty_night": false,
+      "items_prior": false,
+      "items_prior_floor": false,
+      "tray_mult": 3.0
+    },
+    "stack_counts": {
+      "people": "cur",
+      "hands": "cur",
+      "cups": "cur",
+      "dishes": "cur",
+      "items": null
+    },
+    "fits": [
+      {
+        "fit_dates": [
+          "2026-10-25"
+        ],
+        "n_fit_rows": 126,
+        "people_max_area": null,
+        "min_conf": {},
+        "occ_coef": {
+          "people": 1.5286,
+          "people_ctx": 1.0725,
+          "people_ctx_any": 0.4944,
+          "person_conf": 1.0676,
+          "hands": 1.0577,
+          "cups": 0.48,
+          "is_ir": 0.1999
+        },
+        "occ_intercept": -4.486613066972145
+      },
+      {
+        "fit_dates": [
+          "2026-10-26"
+        ],
+        "n_fit_rows": 105,
+        "people_max_area": null,
+        "min_conf": {},
+        "occ_coef": {
+          "people": 1.4856,
+          "people_ctx": 1.547,
+          "people_ctx_any": 1.2092,
+          "person_conf": 1.2835,
+          "hands": 0.7281,
+          "cups": 0.8017,
+          "is_ir": -0.1571
+        },
+        "occ_intercept": -4.337590261858414
+      },
+      {
+        "fit_dates": [
+          "2026-10-25",
+          "2026-10-26"
+        ],
+        "n_fit_rows": 231,
+        "people_max_area": null,
+        "min_conf": {},
+        "occ_coef": {
+          "people": 1.8677,
+          "people_ctx": 1.7997,
+          "people_ctx_any": 0.7616,
+          "person_conf": 1.4349,
+          "hands": 1.0187,
+          "cups": 0.8818,
+          "is_ir": -0.2052
+        },
+        "occ_intercept": -4.854726046574999
+      }
+    ],
+    "notes": "NB1 с dishes = 3 x подносы (колонка dishes бейзлайна x 1.5)"
+  },
+  "local_metrics": {
+    "oof_all": {
+      "score": 0.5827303401084583,
+      "occupancy_ap": 0.9171004085191299,
+      "rows": 231,
+      "occupied": 23,
+      "quality": {
+        "people": 0.7586206896551724,
+        "hands": 0.5862068965517242,
+        "cups": 0.6190476190476191,
+        "dishes": 0.368421052631579,
+        "items": 0.16339285714285712
+      },
+      "abs_error": {
+        "people": 7.0,
+        "hands": 12.0,
+        "cups": 8.0,
+        "dishes": 12.0,
+        "items": 23.425
+      },
+      "objects": {
+        "people": 29.0,
+        "hands": 29.0,
+        "cups": 21.0,
+        "dishes": 19.0,
+        "items": 28.0
+      }
+    },
+    "f25": {
+      "score": 0.596708167989418,
+      "occupancy_ap": 0.9891493055555556,
+      "rows": 105,
+      "occupied": 16,
+      "quality": {
+        "people": 0.85,
+        "hands": 0.47619047619047616,
+        "cups": 0.5714285714285714,
+        "dishes": 0.4666666666666667,
+        "items": 0.12870370370370365
+      },
+      "abs_error": {
+        "people": 3.0,
+        "hands": 11.0,
+        "cups": 6.0,
+        "dishes": 8.0,
+        "items": 15.683333333333334
+      },
+      "objects": {
+        "people": 20.0,
+        "hands": 21.0,
+        "cups": 14.0,
+        "dishes": 15.0,
+        "items": 18.0
+      }
+    },
+    "f26": {
+      "score": 0.5661211233211233,
+      "occupancy_ap": 0.9340659340659339,
+      "rows": 126,
+      "occupied": 7,
+      "quality": {
+        "people": 0.5555555555555556,
+        "hands": 0.875,
+        "cups": 0.7142857142857143,
+        "dishes": 0.0,
+        "items": 0.22583333333333333
+      },
+      "abs_error": {
+        "people": 4.0,
+        "hands": 1.0,
+        "cups": 2.0,
+        "dishes": 4.0,
+        "items": 7.741666666666666
+      },
+      "objects": {
+        "people": 9.0,
+        "hands": 8.0,
+        "cups": 7.0,
+        "dishes": 4.0,
+        "items": 10.0
+      }
+    },
+    "robust": {
+      "oof_all": {
+        "score": 0.5441915667259193,
+        "occupancy_ap": 0.9095852846099881,
+        "rows": 226,
+        "occupied": 22,
+        "quality": {
+          "people": 0.75,
+          "hands": 0.5555555555555556,
+          "cups": 0.7058823529411764,
+          "dishes": 0.08333333333333337,
+          "items": 0.1694444444444445
+        },
+        "abs_error": {
+          "people": 6.0,
+          "hands": 12.0,
+          "cups": 5.0,
+          "dishes": 11.0,
+          "items": 22.424999999999997
+        },
+        "objects": {
+          "people": 24.0,
+          "hands": 27.0,
+          "cups": 17.0,
+          "dishes": 12.0,
+          "items": 27.0
+        }
+      },
+      "f25": {
+        "score": 0.5573814929480565,
+        "occupancy_ap": 0.9877124183006536,
+        "rows": 100,
+        "occupied": 15,
+        "quality": {
+          "people": 0.8666666666666667,
+          "hands": 0.42105263157894735,
+          "cups": 0.7,
+          "dishes": 0.125,
+          "items": 0.13627450980392153
+        },
+        "abs_error": {
+          "people": 2.0,
+          "hands": 11.0,
+          "cups": 3.0,
+          "dishes": 7.0,
+          "items": 14.683333333333334
+        },
+        "objects": {
+          "people": 15.0,
+          "hands": 19.0,
+          "cups": 10.0,
+          "dishes": 8.0,
+          "items": 17.0
+        }
+      },
+      "f26": {
+        "score": 0.5661211233211233,
+        "occupancy_ap": 0.9340659340659339,
+        "rows": 126,
+        "occupied": 7,
+        "quality": {
+          "people": 0.5555555555555556,
+          "hands": 0.875,
+          "cups": 0.7142857142857143,
+          "dishes": 0.0,
+          "items": 0.22583333333333333
+        },
+        "abs_error": {
+          "people": 4.0,
+          "hands": 1.0,
+          "cups": 2.0,
+          "dishes": 4.0,
+          "items": 7.741666666666666
+        },
+        "objects": {
+          "people": 9.0,
+          "hands": 8.0,
+          "cups": 7.0,
+          "dishes": 4.0,
+          "items": 10.0
+        }
+      }
+    },
+    "ir1": {
+      "oof_all": {
+        "score": 0.7015584415584415,
+        "occupancy_ap": 1.0,
+        "rows": 69,
+        "occupied": 4,
+        "quality": {
+          "people": 0.75,
+          "hands": 1.0,
+          "cups": 0.375,
+          "dishes": 0.5454545454545454,
+          "items": 0.4642857142857143
+        },
+        "abs_error": {
+          "people": 2.0,
+          "hands": 0.0,
+          "cups": 5.0,
+          "dishes": 5.0,
+          "items": 3.75
+        },
+        "objects": {
+          "people": 8.0,
+          "hands": 4.0,
+          "cups": 8.0,
+          "dishes": 11.0,
+          "items": 7.0
+        }
+      },
+      "f25": {
+        "score": 0.6651428571428571,
+        "occupancy_ap": 1.0,
+        "rows": 15,
+        "occupied": 1,
+        "quality": {
+          "people": 0.8,
+          "hands": 1.0,
+          "cups": 0.25,
+          "dishes": 0.8571428571428572,
+          "items": 0.0
+        },
+        "abs_error": {
+          "people": 1.0,
+          "hands": 0.0,
+          "cups": 3.0,
+          "dishes": 1.0,
+          "items": 1.0
+        },
+        "objects": {
+          "people": 5.0,
+          "hands": 2.0,
+          "cups": 4.0,
+          "dishes": 7.0,
+          "items": 1.0
+        }
+      },
+      "f26": {
+        "score": 0.6333333333333334,
+        "occupancy_ap": 1.0,
+        "rows": 54,
+        "occupied": 3,
+        "quality": {
+          "people": 0.6666666666666667,
+          "hands": 1.0,
+          "cups": 0.5,
+          "dishes": 0.0,
+          "items": 0.5416666666666667
+        },
+        "abs_error": {
+          "people": 1.0,
+          "hands": 0.0,
+          "cups": 2.0,
+          "dishes": 4.0,
+          "items": 2.75
+        },
+        "objects": {
+          "people": 3.0,
+          "hands": 2.0,
+          "cups": 4.0,
+          "dishes": 4.0,
+          "items": 6.0
+        }
+      }
+    },
+    "ir0": {
+      "oof_all": {
+        "score": 0.5421132080693282,
+        "occupancy_ap": 0.9191814249620249,
+        "rows": 162,
+        "occupied": 19,
+        "quality": {
+          "people": 0.7619047619047619,
+          "hands": 0.52,
+          "cups": 0.7692307692307692,
+          "dishes": 0.125,
+          "items": 0.0630952380952382
+        },
+        "abs_error": {
+          "people": 5.0,
+          "hands": 12.0,
+          "cups": 3.0,
+          "dishes": 7.0,
+          "items": 19.674999999999997
+        },
+        "objects": {
+          "people": 21.0,
+          "hands": 25.0,
+          "cups": 13.0,
+          "dishes": 8.0,
+          "items": 21.0
+        }
+      },
+      "f25": {
+        "score": 0.5573814929480565,
+        "occupancy_ap": 0.9877124183006536,
+        "rows": 90,
+        "occupied": 15,
+        "quality": {
+          "people": 0.8666666666666667,
+          "hands": 0.42105263157894735,
+          "cups": 0.7,
+          "dishes": 0.125,
+          "items": 0.13627450980392153
+        },
+        "abs_error": {
+          "people": 2.0,
+          "hands": 11.0,
+          "cups": 3.0,
+          "dishes": 7.0,
+          "items": 14.683333333333334
+        },
+        "objects": {
+          "people": 15.0,
+          "hands": 19.0,
+          "cups": 10.0,
+          "dishes": 8.0,
+          "items": 17.0
+        }
+      },
+      "f26": {
+        "score": 0.7083333333333335,
+        "occupancy_ap": 0.875,
+        "rows": 72,
+        "occupied": 4,
+        "quality": {
+          "people": 0.5,
+          "hands": 0.8333333333333334,
+          "cups": 1.0,
+          "dishes": 1.0,
+          "items": 0.0
+        },
+        "abs_error": {
+          "people": 3.0,
+          "hands": 1.0,
+          "cups": 0.0,
+          "dishes": 0.0,
+          "items": 4.991666666666667
+        },
+        "objects": {
+          "people": 6.0,
+          "hands": 6.0,
+          "cups": 3.0,
+          "dishes": 0.0,
+          "items": 4.0
+        }
+      }
+    },
+    "bootstrap": {
+      "n": 1000,
+      "frames": 39,
+      "mean": 0.5771824616617967,
+      "std": 0.04440354094987675,
+      "p05": 0.49872247088241817,
+      "p95": 0.6420046749373246
+    },
+    "n_params": null
+  },
+  "public_lb": null
+}

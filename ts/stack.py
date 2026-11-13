@@ -17,7 +17,7 @@ DEFAULTS = {
     'people_fill': True,   # правило раздела 10 для people: 0 сейчас, одинаково у соседей, есть руки
     # голосование с признаками строк (11.1): {counter: {column: '<source>__<имя>', mode: median | replace | max}}
     'vote': {},
-    'tune_people_area': True,
+    'tune_people_area': False,   # фильтр площади бокса person на Public вреден (контракт 1.7), включается только явно
     'tune_conf': True,     # подбирать пороги confidence для источников, кроме prod
     'conf_grid': [round(0.05 * i, 2) for i in range(1, 19)],
     'occ_C': 1.0,
