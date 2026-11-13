@@ -1,0 +1,9 @@
+# Зависимости трека B (детектор), ставятся поверх requirements.txt:
+#   pip install -r requirements.txt -r tracks/det/requirements.txt
+# Локально проверено с torch 2.15.0, torchvision 0.29.2, opencv-python 5.0.0.93 (их подтягивает ultralytics).
+# На Kaggle torch, torchvision и opencv берутся из образа, а эти пакеты ставятся из колёс датасета ts-models
+# без сети (tracks/det/kaggle/README.md). Версии совпадают с WHEELS в tracks/det/fetch_weights.py.
+ultralytics==8.4.211          # YOLO11: COCO-источники, дообучение (B4), pose (B5)
+ultralytics-thop==2.2.5
+ultralytics-platform==0.1.110
+nvidia-ml-py==13.615.71
