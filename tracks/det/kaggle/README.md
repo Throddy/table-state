@@ -6,7 +6,7 @@
 
 | Вход | Откуда | Что внутри |
 |---|---|---|
-| данные соревнования | `rascar-hack-case-2` | пакет организаторов |
+| данные соревнования | `rascar-hack-case-2`; при запуске через API соревнование не подключается, поэтому используется приватная копия пакета `ts-data-private` | пакет организаторов |
 | `ts-models` (приватный Dataset) | каталог `artifacts/ts-models/` после `python tracks/det/fetch_weights.py --wheels` | `yolo11x.pt`, `yolo11m.pt`, `yolo11x-pose.pt`, `wheels/*.whl`, `MANIFEST.json` |
 | `ts-code` (приватный Dataset) | `artifacts/ts-code.zip` после `python tracks/det/kaggle/pack_code.py` | закоммиченный код репозитория и файл `GIT_SHA` |
 

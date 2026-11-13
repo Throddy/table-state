@@ -26,8 +26,9 @@ CONF_MIN = 0.05   # раздел 8.1: сохраняем от 0.05, порог �
 NMS_IOU = 0.5     # раздел 8.1: NMS по классу внутри источника
 TRAIN_DATES = ('2026-10-25', '2026-10-26')
 TEST_DATES = ('2026-10-27', '2026-10-28')
-# Классы своего детектора (задача B2), порядок это номера классов YOLO.
-FT_CLASSES = ['person', 'hand', 'cup', 'plate', 'tray', 'phone', 'personal_item', 'headphones']
+# Классы своего детектора v1, порядок это номера классов YOLO. Решение роли A от 13.11: v1 учится на 4 классах,
+# plate, phone, personal_item, headphones добавляются в v2 после меток C5 (на псевдо-кадрах они без меток).
+FT_CLASSES = ['person', 'hand', 'cup', 'tray']
 # Сырые детекции одной порции: det_id и source добавляются при сборке артефакта.
 RAW_COLUMNS = ['frame_id', 'class_name', 'confidence', 'x1', 'y1', 'x2', 'y2', 'from_row_id', 'from_dt']
 

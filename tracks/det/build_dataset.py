@@ -38,7 +38,7 @@ from ts.slots import slot_of
 
 VIEWS = {'full': None, 'top': 4.0, 'wide': 2.5}     # вид -> увеличение кропа (раздел 9.1)
 PROD_CLASSES = ['person', 'hand', 'cup', 'tray']     # что берём из прод-детектора
-OV_CLASSES = ['plate', 'phone']                      # что берём из псевдометок трека C (задача C5)
+OV_CLASSES = [c for c in ['plate', 'phone'] if c in FT_CLASSES]   # из псевдометок трека C (C5), когда классы есть в детекторе
 PSEUDO_CONF = 0.6                                    # B3: уверенные прод-детекции
 MIN_VISIBLE = 0.5                                    # бокс остаётся в кропе, если видно не меньше половины площади
 MIN_SIDE_PX = 2.0                                    # и после обрезки он не тоньше 2 px кропа
@@ -80,10 +80,10 @@ def paint_mask(uncertain: np.ndarray, confident: np.ndarray) -> np.ndarray:
 
 # ---------- источники боксов ----------
 
-def aux_boxes() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Боксы aux как есть: (объекты классов детектора, столы). Классы вне списка B2 не используются."""
+def aux_boxes() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Боксы aux как есть: (объекты классов детектора, столы, все боксы для выбора holdout)."""
     aux = io.load_aux_boxes()
-    return aux[aux['class_name'].isin(FT_CLASSES)], aux[aux['class_name'] == 'table']
+    return aux[aux['class_name'].isin(FT_CLASSES)], aux[aux['class_name'] == 'table'], aux
 
 
 def pick_holdout(objects: pd.DataFrame, aux_frames: pd.DataFrame) -> tuple[list[str], list[str]]:
@@ -94,7 +94,7 @@ def pick_holdout(objects: pd.DataFrame, aux_frames: pd.DataFrame) -> tuple[list[
     не больше чем на 30 с, в holdout не берётся, а из обучения убирается (та же сцена, аналог правила R4).
     """
     counts = objects.pivot_table(index='frame_id', columns='class_name', values='det_id', aggfunc='size', fill_value=0)
-    counts = counts.reindex(index=sorted(aux_frames['frame_id']), columns=FT_CLASSES, fill_value=0)
+    counts = counts.reindex(index=sorted(aux_frames['frame_id']), columns=['plate', 'phone'], fill_value=0)
     ts = pd.to_datetime(aux_frames.set_index('frame_id')['timestamp'], utc=True)
     rng = np.random.default_rng(SEED)
     both = counts.index[(counts['plate'] > 0) & (counts['phone'] > 0)].tolist()
@@ -227,6 +227,8 @@ def main() -> None:
                         help='файл псевдометок трека C; по умолчанию последний ART/labels/ov_pseudo__v*.parquet')
     parser.add_argument('--bg-frac', type=float, default=0.1,
                         help='сколько псевдо-картинок без боксов оставить, доля от числа картинок с боксами того же вида')
+    parser.add_argument('--pseudo-step', type=int, default=1,
+                        help='брать каждый N-й кадр эпизода (цепочки с шагом 30 с); 2 = каждый второй')
     parser.add_argument('--workers', type=int, default=4)
     args = parser.parse_args()
 
@@ -236,9 +238,9 @@ def main() -> None:
         raise SystemExit(f'{out} уже существует. Датасет неизменяем: выберите другое --name.')
 
     # 1. aux: holdout и обучение
-    objects, aux_tables = aux_boxes()
+    objects, aux_tables, aux_all = aux_boxes()
     aux_frames = pd.read_csv(paths.DATA / 'aux_frames.csv')
-    holdout, excluded = pick_holdout(objects, aux_frames)
+    holdout, excluded = pick_holdout(aux_all, aux_frames)
     plan: dict[str, dict] = {}
     for frame_id in sorted(aux_frames['frame_id']):
         if frame_id in excluded:
@@ -252,7 +254,10 @@ def main() -> None:
 
     # 2. псевдометки: прод-детекции >= 0.6 и метки трека C, неуверенные области под закраску
     frames = io.load_frames()
-    pseudo_ids = sorted(frames.loc[frames['date_utc'].isin(args.pseudo_dates), 'frame_id'])
+    pseudo = frames[frames['date_utc'].isin(args.pseudo_dates)].sort_values('ts')
+    # эпизод это цепочка кадров с шагом 30 с; соседние кадры почти дубликаты, поэтому можно брать каждый N-й
+    episode = (pseudo['ts'].diff().dt.total_seconds().fillna(1e9) > NEAR_SECONDS + 5).cumsum()
+    pseudo_ids = sorted(pseudo.loc[pseudo.groupby(episode).cumcount() % args.pseudo_step == 0, 'frame_id'])
     prod = io.load_prod_dets()
     ov, ov_path = ov_pseudo(args.ov_pseudo)
     prod_objects = prod[prod['class_name'].isin(PROD_CLASSES) & prod['frame_id'].isin(pseudo_ids)]
@@ -326,7 +331,7 @@ def main() -> None:
         'excluded_near_holdout': excluded,
         'pseudo_dates': list(args.pseudo_dates),
         'params': {'views': VIEWS, 'min_visible': MIN_VISIBLE, 'min_side_px': MIN_SIDE_PX, 'max_painted': MAX_PAINTED,
-                   'bg_frac': args.bg_frac, 'paint_rgb': PAINT, 'jpeg_quality': JPEG_QUALITY, 'seed': SEED},
+                   'bg_frac': args.bg_frac, 'pseudo_step': args.pseudo_step, 'paint_rgb': PAINT, 'jpeg_quality': JPEG_QUALITY, 'seed': SEED},
         'images': {f'{s}/{o}/{v}': int(n) for (s, o, v), n in manifest.groupby(['split', 'origin', 'view']).size().items()},
         'boxes_by_class': {s: {c: int(manifest.loc[manifest['split'] == s, f'n_{c}'].sum()) for c in FT_CLASSES}
                            for s in ['train', 'holdout']},
