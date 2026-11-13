@@ -13,7 +13,7 @@ Python 3.12, ядро работает на CPU.
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate   # или: uv venv --python 3.12 .venv
 pip install -r requirements.txt
-# треки B и C дополнительно: pip install -r requirements-gpu.txt
+# трек B дополнительно: pip install -r tracks/det/requirements.txt (у каждого трека свой файл зависимостей)
 ```
 
 ## Данные и переменные окружения
@@ -144,6 +144,7 @@ os.environ['TS_ARTIFACTS'] = '/kaggle/working/artifacts'
 | `ts-artifacts-dets` | `dets/<source>__v<N>.parquet` + карточки, `rows_ext.parquet` |
 | `ts-artifacts-rowfeats` | `rowfeats/<source>__v<N>.parquet` + карточки и `__raw.jsonl` |
 | `ts-models` | веса моделей и колёса зависимостей для запуска без интернета |
+| `ts-code` | архив закоммиченного кода репозитория и файл `GIT_SHA` (`python tracks/det/kaggle/pack_code.py`); новая версия после каждого изменения кода |
 
 Новая версия артефакта это новая версия датасета, номер версии указывается в карточке.
 Финальный ноутбук `notebooks/final_inference.ipynb` запускается с выключенным интернетом.

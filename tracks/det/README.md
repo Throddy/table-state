@@ -8,7 +8,7 @@
 | B1 | пт 03:00 | `report/sheets/train_<frame_id>.jpg` для 39 train-кадров (`python tools/contact_sheet.py`), `tracks/det/ERRORS.md` с типами ошибок прод-детектора (не меньше 8 пунктов) | листы открываются; в `ERRORS.md` отдельно описаны слот 1 (окно), ИК-кадры, руки, посуда |
 | B2 | пт 03:00 | `tracks/det/build_dataset.py`, датасет YOLO: полные кадры и кропы `top` ×4 и `wide` ×2.5; классы `person, hand, cup, plate, tray, phone, personal_item, headphones`; 6 aux-кадров в holdout | визуальная проверка 10 случайных примеров, боксы на местах |
 | B3 | пт 13:00 | вариант «псевдо» (всегда): прод-детекции с confidence ≥ 0.6 и уверенные детекции трека C; ручной разметки нет (правило R7) | карточка датасета с числом боксов по классам и `"manual_labels_used": false` |
-| B4 | пт 14:00 | веса в `artifacts/models/ft_yolo_v1/`, `artifacts/dets/ft_yolo__v1.parquet` на всех кадрах | на aux-holdout recall по `hand` и `cup` не ниже прод-детектора; файл проходит `ts.check_dets`; строка в журнале по правилу 12.4 |
+| B4 | пт 14:00 | веса в `artifacts/models/ft_yolo_v1/`, `artifacts/dets/ft_yolo__v1.parquet` на всех кадрах | v1 только на `person, hand, cup, tray`; hands и cups на `oof_all` в связке с прод-детектором не хуже одного прод-детектора (`python tools/ablate.py`); файл проходит `ts.check_dets`; строка в `experiments/LOG_det.md`; правило 12.4 не применяется (кадры 25–26.10 в обучение не входят) |
 | B5 | пт 20:00 | руки: класс `hand` своего детектора и запястья pose-модели как источник `pose` | hands ≥ 0.70 на `oof_all` в связке с прод-детектором без роста ложных на пустых столах |
 | B6 | пт 20:00 | `dets/coco_person__v1.parquet`, объединённый список людей; вместе с A правило привязки 9.3 | people ≥ 0.80 на `oof_all` |
 | B7 | сб 12:00 | самообучение на псевдометках тестовых дней, v2, TTA | v2 не хуже v1 по правилу 12.3 или отклонена |
@@ -20,7 +20,7 @@
 - `ts.rows.load_rows_ext()`: индекс строк (кадр, сосед, рамка, слот, `is_ir`).
 - `python -m ts.check dets <файл>`: проверка формата перед публикацией артефакта.
 
-Зависимости трека дописываются в `requirements-gpu.txt`, модели в `MODELS.md`.
+Зависимости трека лежат в `tracks/det/requirements.txt`, модели в `MODELS.md`.
 
 ## Файлы трека
 
