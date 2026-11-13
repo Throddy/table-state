@@ -49,6 +49,7 @@ assign:
   people:
     min_table_overlap: 0.15    # пересечение / площадь стола, правило бейзлайна организаторов
     rescue_min: 0.25           # добор сидящих за дальней стороной: доля нижней трети бокса в зоне top
+    rescue_pick: horizontal    # при нескольких кандидатах: ближайшая по горизонтали рамка (share = большая доля, как в NB1)
 
 # Фильтры и контекст (раздел 10, ts.temporal).
 temporal:
@@ -58,6 +59,7 @@ temporal:
   # исключения из фильтра площади; на train не срабатывают, выключены (см. experiments/LOG_core.md)
   people_big_keep_with_hand: false
   people_big_keep_persistent: false
+  bowl_overlap_iou: 0.3        # миска, перекрытая подносом или чашкой того же стола (IoU >= 0.3), в dishes не идёт
 
 # Стекер (раздел 11, ts.stack).
 stack:

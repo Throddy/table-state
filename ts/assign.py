@@ -25,6 +25,10 @@ DEFAULTS = {
     'people': {
         'min_table_overlap': 0.15,   # пересечение / площадь стола, как в бейзлайне организаторов (9.3.5)
         'rescue_min': 0.25,          # доля нижней трети бокса человека внутри зоны top
+        # выбор стола при доборе, если порог прошли несколько столов:
+        # 'horizontal' = стол, к рамке которого центр нижней трети бокса ближе по горизонтали
+        #                (внутри рамки расстояние 0), при равенстве большая доля; 'share' = большая доля
+        'rescue_pick': 'horizontal',
     },
 }
 
@@ -115,8 +119,9 @@ def _assign_people(d: pd.DataFrame, tables: np.ndarray, tops: np.ndarray, p: dic
     1. Владелец это стол с максимальным `пересечение / площадь стола`, если оно
        не ниже `min_table_overlap` (правило организаторов, 9.3.5).
     2. Иначе (человек почти не закрывает рамку, типично для сидящих на диване
-       за дальней стороной): стол, в зону `top` которого попадает наибольшая
-       доля нижней трети бокса человека, если она не ниже `rescue_min`.
+       за дальней стороной): кандидаты это столы, в зону `top` которых попадает
+       не меньше `rescue_min` нижней трети бокса человека. Из нескольких
+       кандидатов выбирается по `rescue_pick` (см. `DEFAULTS`).
     """
     boxes = d[['x1', 'y1', 'x2', 'y2']].to_numpy(float)
     overlap = _inter(boxes, tables) / np.maximum(_area(tables), 1e-9)[None, :]
@@ -129,9 +134,18 @@ def _assign_people(d: pd.DataFrame, tables: np.ndarray, tops: np.ndarray, p: dic
         if overlap[i, j] >= p['min_table_overlap']:
             out.append((i, j, 'overlap', float(overlap[i, j])))
             continue
-        j = int(lower_share[i].argmax())
-        if lower_share[i, j] >= p['rescue_min']:
-            out.append((i, j, 'rescue', float(lower_share[i, j])))
+        cand = np.flatnonzero(lower_share[i] >= p['rescue_min'])
+        if not len(cand):
+            continue
+        if p['rescue_pick'] == 'horizontal' and len(cand) > 1:
+            # Доля пересечения занижена у стола, обрезанного краем кадра (слот 6), поэтому при нескольких
+            # кандидатах решает горизонтальное расстояние от центра нижней трети бокса до рамки стола.
+            cx = (lower[i, 0] + lower[i, 2]) / 2
+            gap = np.maximum(np.maximum(tables[cand, 0] - cx, cx - tables[cand, 2]), 0.0)
+            j = int(min(cand, key=lambda k: (round(float(gap[list(cand).index(k)]), 6), -float(lower_share[i, k]))))
+        else:
+            j = int(cand[lower_share[i, cand].argmax()])
+        out.append((i, j, 'rescue', float(lower_share[i, j])))
     return out
 
 

@@ -17,6 +17,8 @@ DEFAULTS = {
     # исключения из фильтра площади (стоящий вплотную гость по правилам считается):
     'people_big_keep_with_hand': False,     # в зоне top этого стола на том же кадре есть рука
     'people_big_keep_persistent': False,    # тот же человек (IoU >= 0.5) есть на обоих соседних кадрах
+    # двойной счёт посуды: миска, перекрытая (IoU не ниже порога) подносом или чашкой того же стола, не считается
+    'bowl_overlap_iou': 0.3,
 }
 
 
@@ -57,12 +59,36 @@ def apply_filters(assigned: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     return assigned[keep]
 
 
+def overlapping_bowls(frame: pd.DataFrame, iou_thr: float | None) -> np.ndarray:
+    """Маска мисок, которые перекрываются (IoU >= `iou_thr`) с подносом или чашкой той же строки и кадра.
+
+    COCO-детектор часто называет миской чашку или посуду на подносе; такая миска уже посчитана
+    в cups или в подносе (с множителем `post.tray_mult`), второй раз в dishes она не идёт.
+    """
+    from .assign import _iou
+    mask = np.zeros(len(frame), dtype=bool)
+    if not iou_thr or not len(frame) or not (frame['class_name'] == 'bowl').any():
+        return mask
+    position = {index: i for i, index in enumerate(frame.index)}
+    for _, g in frame.groupby(['row_id', 'dt'], sort=False):
+        bowls = g[g['class_name'] == 'bowl']
+        others = g[g['class_name'].isin(['tray', 'cup'])]
+        if bowls.empty or others.empty:
+            continue
+        hit = (_iou(bowls[['x1', 'y1', 'x2', 'y2']].to_numpy(float),
+                    others[['x1', 'y1', 'x2', 'y2']].to_numpy(float)) >= iou_thr).any(axis=1)
+        for index in bowls.index[hit]:
+            mask[position[index]] = True
+    return mask
+
+
 def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all') -> pd.DataFrame:
     """Объединить привязанные объекты нескольких источников в один список (9.4).
 
     К каждому источнику применяются его пороги confidence, затем объекты
     одного счётчика в одной строке дедуплицируются по 9.2.6 (остаётся самый
-    уверенный). Результат получает `source = name`, исходное имя источника
+    уверенный), миски поверх подноса или чашки отбрасываются
+    (`overlapping_bowls`). Результат получает `source = name`, исходное имя источника
     сохраняется в `origin`, число согласных источников в `n_src`.
     """
     from .assign import DEFAULTS as ASSIGN_DEFAULTS, _iou, dedup_objects
@@ -74,6 +100,7 @@ def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all'
     merged['origin'] = merged['source']
     small = {**ASSIGN_DEFAULTS['small'], **(cfg or {}).get('assign', {}).get('small', {})}
     kept = merged.loc[dedup_objects(merged, small)].copy()
+    kept = kept[~overlapping_bowls(kept, p['bowl_overlap_iou'])].copy()
     kept['n_src'] = 1
     if len(parts) > 1:
         groups = {key: g for key, g in merged.groupby(['row_id', 'dt', 'counter'], sort=False)}
