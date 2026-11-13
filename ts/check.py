@@ -57,6 +57,8 @@ def _card(path: Path, required: list[str]) -> dict:
     for key in ['manual_labels_used', 'uses_train_counters']:
         if key in required and not isinstance(card[key], bool):
             _fail(path, f'поле карточки {key} должно быть true/false')
+    if card.get('manual_labels_used'):
+        _fail(path, 'manual_labels_used = true: ручная разметка любых кадров пакета запрещена (правило R7)')
     return card
 
 

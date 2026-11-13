@@ -103,6 +103,8 @@ def test_dets_broken(tmp_path, dets, breaker, message):
 
 
 def test_dets_card_rules(tmp_path, dets):
+    with pytest.raises(CheckError, match='R7'):
+        check_dets(save_dets(tmp_path, dets, manual_labels_used=True))
     with pytest.raises(CheckError, match='1718'):
         check_dets(save_dets(tmp_path, dets, frames_processed={'n': 39, 'sha1': 'x'}))
     path = tmp_path / 'nocard__v1.parquet'

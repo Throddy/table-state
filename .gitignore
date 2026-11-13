@@ -5,6 +5,8 @@ artifacts/
 # листы и демо в report/ коммитим
 !report/**/*.jpg
 !report/**/*.png
+# контактные листы тяжёлые, каждый строит их у себя: python tools/contact_sheet.py
+report/sheets/
 *.parquet
 *.pt
 *.pth
