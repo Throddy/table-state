@@ -19,3 +19,36 @@
 - `python -m ts.check dets <файл>` и `python -m ts.check rowfeats <файл>`: проверка формата перед публикацией артефакта.
 
 Зависимости трека дописываются в `requirements-gpu.txt`, модели в `MODELS.md`.
+
+## Запуск C2 и C5
+
+Текущее состояние, измерения, оставшиеся шаги и блокеры: [HANDOFF.md](HANDOFF.md).
+
+```bash
+pip install -r requirements.txt -r tracks/ov/requirements.txt
+python tracks/ov/fetch_weights.py                                  # один раз, с интернетом: веса в artifacts/models/
+python tracks/ov/run_ov.py --source ov_gdino --smoke 8             # короткая проверка, файлы удаляются
+python tracks/ov/run_ov.py --source ov_gdino --rows targets        # целевые кадры (dt = 0) -> dets/ov_gdino__v1
+python tracks/ov/run_ov.py --source ov_owl --rows targets --batch 2 --fp16      # -> dets/ov_owl__v1
+python tracks/ov/make_pseudo.py ov_gdino__v1 ov_owl__v1            # C5 -> labels/ov_pseudo__v1.parquet
+python tracks/ov/eval_dets.py ov_gdino__v1 ov_owl__v1 --rowfeats 1 # оценка на train и rowfeats/ov_counts__v1
+```
+
+- Инференс только на GPU: на CPU уходит 12–24 с на кроп. `run_ov.py` возобновляемый: при обрыве или после
+  `--max-minutes` повторить ту же команду.
+- `--rows targets`: 4964 кропа на модель (целевые кадры); `--rows all`: 10198 кропов, все 1718 кадров с соседями.
+- Отладка на train: `--rows train0 --version 91 --prompt-version 1`. Промпты: `prompts/*_v1.txt` … `*_v3.txt`,
+  таблица «понятие -> класс 8.2»: `CONCEPT_CLASS` в `run_ov.py`.
+- `eval_dets.py` это диагностика трека с временной привязкой; числа по контракту даёт стекер трека A.
+
+### Kaggle
+
+1. Datasets → New Dataset: загрузить `artifacts/kaggle/table-state-code.zip` (или архив своего коммита:
+   `git archive --format=zip --prefix=table-state/ -o table-state.zip HEAD`), сделать приватным.
+2. Code → New Notebook → File → Import Notebook: `tracks/ov/kaggle_c2_c5.ipynb`.
+3. Add Input: датасет соревнования и датасет с кодом. Settings: Accelerator `GPU T4 x2`, Internet `On`.
+4. В первой ячейке вписать `TS_GIT_SHA`. Выполнить ячейки 0–2 интерактивно, по таблицам выбрать `PROMPT_VERSION`.
+5. Поставить `RUN_TRAIN_COMPARE = False`, Save Version → Save & Run All.
+6. Из Output скачать `artifacts/labels/ov_pseudo__v1.*`, `artifacts/rowfeats/ov_counts__v1.*`, `artifacts/dets/ov_*__v1.*`;
+   Output сохранить как версию датасета команды. Каталог `artifacts/models` из Output сохранить как датасет с весами:
+   с ним следующие запуски идут без интернета.
