@@ -43,7 +43,7 @@ temporal:
   min_conf: {}                 # {counter: порог} или {source: {counter: порог}}
   people_max_area: 45000       # px²; крупнее = идущий или стоящий в проходе. Подгоняется на train (ts.stack.tune_people_area)
   people_rescue: true
-  # исключения из фильтра площади; на train не срабатывают, выключены (см. experiments/LOG.md)
+  # исключения из фильтра площади; на train не срабатывают, выключены (см. experiments/LOG_core.md)
   people_big_keep_with_hand: false
   people_big_keep_persistent: false
 

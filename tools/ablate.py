@@ -6,7 +6,7 @@
   python tools/ablate.py --set temporal.people_max_area=36000 --set stack.tune_people_area=false
 
 Каждый вариант оценивается честно: out-of-fold по дням через ts.cv.evaluate.
-Печатает таблицу и готовые строки для experiments/LOG.md.
+Печатает таблицу и готовые строки для experiments/LOG_core.md.
 """
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def main() -> None:
         print(f"{name:<44}{a['score']:>8.4f}{report['f25']['score']:>8.4f}{report['f26']['score']:>8.4f}"
               f"{report['robust']['oof_all']['score']:>8.4f}{a['occupancy_ap']:>7.3f}"
               + ''.join(f"{a['quality'][c]:>8.3f}" for c in COUNTS))
-    print('\nСтроки для experiments/LOG.md:')
+    print('\nСтроки для experiments/LOG_core.md:')
     for name, report in reports:
         print(log_row(report, 'A', name, '<что изменено>', f'`python tools/ablate.py` (robust {report["robust"]["oof_all"]["score"]:.4f})'))
 
