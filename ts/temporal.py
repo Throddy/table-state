@@ -10,9 +10,13 @@ COUNTERS = ['people', 'hands', 'cups', 'dishes', 'items']
 STATS = ['cur', 'prev', 'next', 'med', 'max', 'min', 'conf_max', 'conf_sum']
 
 DEFAULTS = {
-    'min_conf': {},              # {counter: порог confidence}, по умолчанию без порога
+    # пороги confidence: {counter: порог} для всех источников или {source: {counter: порог}}
+    'min_conf': {},
     'people_max_area': None,     # бокс человека крупнее (px²) считается идущим или стоящим в проходе
     'people_rescue': True,       # учитывать людей, привязанных правилом 'rescue' (ts.assign)
+    # исключения из фильтра площади (стоящий вплотную гость по правилам считается):
+    'people_big_keep_with_hand': False,     # в зоне top этого стола на том же кадре есть рука
+    'people_big_keep_persistent': False,    # тот же человек (IoU >= 0.5) есть на обоих соседних кадрах
 }
 
 
@@ -20,18 +24,67 @@ def _cfg(cfg: dict | None) -> dict:
     return {**DEFAULTS, **(cfg or {}).get('temporal', {})}
 
 
+def _conf_mask(assigned: pd.DataFrame, min_conf: dict) -> np.ndarray:
+    """Маска объектов, проходящих пороги confidence (плоские и по источникам)."""
+    keep = np.ones(len(assigned), dtype=bool)
+    origin = assigned['origin'] if 'origin' in assigned else assigned['source']
+    for key, value in (min_conf or {}).items():
+        if isinstance(value, dict):
+            for counter, thr in value.items():
+                keep &= ~((origin == key) & (assigned['counter'] == counter) & (assigned['confidence'] < thr)).to_numpy()
+        else:
+            keep &= ~((assigned['counter'] == key) & (assigned['confidence'] < value)).to_numpy()
+    return keep
+
+
 def apply_filters(assigned: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     """Оставить объекты, проходящие пороги `cfg['temporal']`."""
     p = _cfg(cfg)
-    keep = np.ones(len(assigned), dtype=bool)
-    for counter, thr in (p['min_conf'] or {}).items():
-        keep &= ~((assigned['counter'] == counter) & (assigned['confidence'] < thr)).to_numpy()
+    keep = _conf_mask(assigned, p['min_conf'])
     people = (assigned['counter'] == 'people').to_numpy()
-    if p['people_max_area'] is not None:
-        keep &= ~(people & (assigned['area'] > p['people_max_area']).to_numpy())
     if not p['people_rescue']:
         keep &= ~(people & (assigned['rule'] == 'rescue').to_numpy())
+    if p['people_max_area'] is not None:
+        big = people & (assigned['area'] > p['people_max_area']).to_numpy()
+        exempt = np.zeros(len(assigned), dtype=bool)
+        if p['people_big_keep_with_hand'] and big.any():
+            hands = assigned[(assigned['counter'] == 'hands').to_numpy() & keep]
+            with_hand = set(zip(hands['row_id'], hands['dt']))
+            exempt |= np.array([(r, d) in with_hand for r, d in zip(assigned['row_id'], assigned['dt'])], dtype=bool)
+        if p['people_big_keep_persistent']:
+            exempt |= ((assigned['ctx_n'] == 2) & (assigned['persist'] == 2)).to_numpy()
+        keep &= ~(big & ~exempt)
     return assigned[keep]
+
+
+def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all') -> pd.DataFrame:
+    """Объединить привязанные объекты нескольких источников в один список (9.4).
+
+    К каждому источнику применяются его пороги confidence, затем объекты
+    одного счётчика в одной строке дедуплицируются по 9.2.6 (остаётся самый
+    уверенный). Результат получает `source = name`, исходное имя источника
+    сохраняется в `origin`, число согласных источников в `n_src`.
+    """
+    from .assign import DEFAULTS as ASSIGN_DEFAULTS, _iou, dedup_objects
+    p = _cfg(cfg)
+    parts = [a[_conf_mask(a, p['min_conf'])] for a in parts if len(a)]
+    if not parts:
+        return pd.DataFrame(columns=['row_id', 'dt', 'counter', 'confidence', 'source', 'origin', 'n_src'])
+    merged = pd.concat(parts, ignore_index=True)
+    merged['origin'] = merged['source']
+    small = {**ASSIGN_DEFAULTS['small'], **(cfg or {}).get('assign', {}).get('small', {})}
+    kept = merged.loc[dedup_objects(merged, small)].copy()
+    kept['n_src'] = 1
+    if len(parts) > 1:
+        groups = {key: g for key, g in merged.groupby(['row_id', 'dt', 'counter'], sort=False)}
+        counts = []
+        for r in kept.itertuples():
+            g = groups[(r.row_id, r.dt, r.counter)]
+            near = _iou(np.array([[r.x1, r.y1, r.x2, r.y2]]), g[['x1', 'y1', 'x2', 'y2']].to_numpy(float))[0] >= 0.3
+            counts.append(int(g.loc[near, 'origin'].nunique()) or 1)
+        kept['n_src'] = counts
+    kept['source'] = name
+    return kept.reset_index(drop=True)
 
 
 def context_median(cur: np.ndarray, prev: np.ndarray, nxt: np.ndarray) -> np.ndarray:

@@ -8,7 +8,8 @@ from .check import CLASS_TO_COUNTER
 from .geometry import zone
 
 ASSIGNED_COLUMNS = ['row_id', 'dt', 'det_id', 'counter', 'weight',
-                    'source', 'class_name', 'confidence', 'area', 'rule', 'score']
+                    'source', 'class_name', 'confidence', 'area', 'rule', 'score',
+                    'x1', 'y1', 'x2', 'y2', 'persist', 'ctx_n']
 NEGATIVE_CLASSES = [c for c, counter in CLASS_TO_COUNTER.items() if counter is None and c != 'table']
 AREA_SHARE_CLASSES = {'bag', 'personal_item'}
 
@@ -134,6 +135,50 @@ def _assign_people(d: pd.DataFrame, tables: np.ndarray, tops: np.ndarray, p: dic
     return out
 
 
+def _assign_frame(d: pd.DataFrame | None, t: pd.DataFrame, dt: int, p: dict) -> pd.DataFrame | None:
+    """Привязать детекции одного кадра-источника к рамкам столов целевого кадра."""
+    if d is None:
+        return None
+    d = d[_suppress_negatives(d, p['small']['negative_iou'])]
+    if d.empty:
+        return None
+    t = t.sort_values('table_id', kind='stable')
+    tables = t[['x1', 'y1', 'x2', 'y2']].to_numpy(float)
+    tops = np.array([zone(b, 'top', s) for b, s in zip(tables, t['slot'])])
+    row_ids = t['row_id'].to_numpy()
+    person = (d['class_name'] == 'person').to_numpy()
+    links = []
+    for part, fn, group in [(d[person], _assign_people, 'people'), (d[~person], _assign_small, 'small')]:
+        if len(part):
+            links += [(part.iloc[i], j, rule, score) for i, j, rule, score in fn(part, tables, tops, p[group])]
+    if not links:
+        return None
+    frame = pd.DataFrame([{
+        'row_id': row_ids[j], 'dt': dt, 'det_id': r.det_id, 'counter': CLASS_TO_COUNTER[r.class_name],
+        'weight': 1.0, 'source': r.source, 'class_name': r.class_name, 'confidence': float(r.confidence),
+        'area': float((r.x2 - r.x1) * (r.y2 - r.y1)), 'rule': rule, 'score': score,
+        'x1': float(r.x1), 'y1': float(r.y1), 'x2': float(r.x2), 'y2': float(r.y2)} for r, j, rule, score in links])
+    return frame.loc[dedup_objects(frame, p['small'])].reset_index(drop=True)
+
+
+def dedup_objects(frame: pd.DataFrame, p: dict | None = None) -> list:
+    """Индексы строк после дедупликации 9.2.6 внутри каждой группы `(row_id, dt, counter)`.
+
+    Для людей критерий один: IoU не ниже `dedup_iou`. Используется и внутри
+    источника, и при объединении источников (`ts.temporal.merge_sources`).
+    """
+    p = p or DEFAULTS['small']
+    keep: list = []
+    for key, g in frame.groupby(['row_id', 'dt', 'counter'], sort=False):
+        if len(g) == 1:
+            keep += g.index.tolist()
+            continue
+        params = {**p, 'dedup_small_px': 0.0} if key[2] == 'people' else p
+        idx = _dedup(g[['x1', 'y1', 'x2', 'y2']].to_numpy(float), g['confidence'].to_numpy(float), params)
+        keep += g.index[idx].tolist()
+    return sorted(keep)
+
+
 def assign(dets: pd.DataFrame, rows: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     """Привязать детекции одного источника к строкам `rows_ext`.
 
@@ -142,7 +187,10 @@ def assign(dets: pd.DataFrame, rows: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     кадра. `cfg`: конфиг, параметры в `cfg['assign']` (см. `DEFAULTS`).
 
     Возвращает длинную таблицу `row_id, dt, det_id, counter, weight` и
-    служебные колонки `source, class_name, confidence, area, rule, score`.
+    служебные колонки `source, class_name, confidence, area, rule, score`,
+    бокс `x1, y1, x2, y2`, а для людей `persist` (на скольких других кадрах
+    тройки «целевой + соседи» есть person с IoU >= 0.5) и `ctx_n` (сколько
+    других кадров в тройке доступно).
     Каждый объект привязан не больше чем к одному столу в пределах пары
     (целевой кадр, кадр-источник). Фильтры по `confidence`, размеру бокса
     человека и правилу привязки применяет `ts.temporal.aggregate`, чтобы их
@@ -152,37 +200,26 @@ def assign(dets: pd.DataFrame, rows: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     counted = dets[dets['class_name'] != 'table']
     by_frame = {frame_id: g for frame_id, g in counted.groupby('frame_id', sort=False)}
     records = []
-    for (_, src, dt), t in rows.groupby(['frame_id', 'src_frame_id', 'dt'], sort=False):
-        d = by_frame.get(src)
-        if d is None:
-            continue
-        d = d[_suppress_negatives(d, p['small']['negative_iou'])]
-        if d.empty:
-            continue
-        t = t.sort_values('table_id', kind='stable')
-        tables = t[['x1', 'y1', 'x2', 'y2']].to_numpy(float)
-        tops = np.array([zone(b, 'top', s) for b, s in zip(tables, t['slot'])])
-        row_ids = t['row_id'].to_numpy()
-        person = (d['class_name'] == 'person').to_numpy()
-        links = []
-        for part, fn in [(d[person], _assign_people), (d[~person], _assign_small)]:
-            if len(part):
-                links += [(part.iloc[i], j, rule, score) for i, j, rule, score in fn(part, tables, tops, p['people' if fn is _assign_people else 'small'])]
-        if not links:
-            continue
-        frame = pd.DataFrame([{
-            'row_id': row_ids[j], 'dt': int(dt), 'det_id': r.det_id, 'counter': CLASS_TO_COUNTER[r.class_name],
-            'weight': 1.0, 'source': r.source, 'class_name': r.class_name, 'confidence': float(r.confidence),
-            'area': float((r.x2 - r.x1) * (r.y2 - r.y1)), 'rule': rule, 'score': score,
-            'x1': r.x1, 'y1': r.y1, 'x2': r.x2, 'y2': r.y2} for r, j, rule, score in links])
-        keep = []
-        for _, g in frame.groupby(['row_id', 'counter'], sort=False):
-            if len(g) == 1 or g['counter'].iloc[0] == 'people':
-                keep += g.index.tolist()
-            else:
-                idx = _dedup(g[['x1', 'y1', 'x2', 'y2']].to_numpy(float), g['confidence'].to_numpy(float), p['small'])
-                keep += g.index[idx].tolist()
-        records.append(frame.loc[sorted(keep), ASSIGNED_COLUMNS])
+    for _, frame_rows in rows.groupby('frame_id', sort=False):
+        sources = frame_rows.drop_duplicates('dt').set_index('dt')['src_frame_id'].to_dict()
+        people_boxes = {}
+        for dt, src in sources.items():
+            d = by_frame.get(src)
+            part = d[d['class_name'] == 'person'] if d is not None else None
+            people_boxes[dt] = part[['x1', 'y1', 'x2', 'y2']].to_numpy(float) if part is not None else np.zeros((0, 4))
+        for dt, src in sources.items():
+            frame = _assign_frame(by_frame.get(src), frame_rows[frame_rows['dt'] == dt], int(dt), p)
+            if frame is None:
+                continue
+            others = [boxes for other, boxes in people_boxes.items() if other != dt]
+            person = (frame['counter'] == 'people').to_numpy()
+            persist = np.zeros(len(frame), dtype=int)
+            if person.any():
+                own = frame.loc[person, ['x1', 'y1', 'x2', 'y2']].to_numpy(float)
+                persist[person] = sum((_iou(own, boxes) >= 0.5).any(axis=1).astype(int) for boxes in others if len(boxes))
+            frame['persist'] = persist
+            frame['ctx_n'] = len(others)
+            records.append(frame[ASSIGNED_COLUMNS])
     if not records:
         return pd.DataFrame(columns=ASSIGNED_COLUMNS)
     return pd.concat(records, ignore_index=True)
