@@ -2,6 +2,7 @@
 seed: 419
 
 # Источники детекций и признаков строк, участвующие в сборке.
+# dets: prod или имя файла artifacts/dets/<source>__v<N> без расширения; rowfeats: artifacts/rowfeats/<source>__v<N>.
 sources:
   dets: [prod]
   rowfeats: []
@@ -39,17 +40,23 @@ assign:
 
 # Фильтры и контекст (раздел 10, ts.temporal).
 temporal:
-  min_conf: {}
+  min_conf: {}                 # {counter: порог} или {source: {counter: порог}}
   people_max_area: 45000       # px²; крупнее = идущий или стоящий в проходе. Подгоняется на train (ts.stack.tune_people_area)
   people_rescue: true
+  # исключения из фильтра площади; на train не срабатывают, выключены (см. experiments/LOG.md)
+  people_big_keep_with_hand: false
+  people_big_keep_persistent: false
 
 # Стекер (раздел 11, ts.stack).
 stack:
-  source: prod
+  source: all                  # объединённый список объектов всех источников из sources.dets
   # cur = текущий кадр, med = правило раздела 10. Для cups med на train хуже на 1 строку, поэтому пока cur.
   counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: null}
   people_fill: true            # people из соседей, если сейчас 0, у соседей одинаково и есть руки
   tune_people_area: true
+  tune_conf: true              # пороги confidence источников, кроме prod: по одному на (источник, счётчик)
+  # голосование с признаками строк: {counter: {column: vlm_qwen__items, mode: median | replace | max}}
+  vote: {}
   occ_C: 1.0
 
 # Постобработка (раздел 11.3). Каждое правило включается отдельно после проверки по 12.3.
@@ -59,3 +66,5 @@ post:
   round_counts: false
   clip: true
   empty_night: false
+  items_prior: true            # people >= 1 и items = 0 -> items = 1, пока источников items нет
+  items_prior_floor: false     # приор как нижняя граница при наличии источников items; включать после проверки 12.3

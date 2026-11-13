@@ -137,6 +137,7 @@ def test_context_median_rule():
 def test_real_rows_with_one_neighbour():
     from ts.features import build_features
     f = build_features(['prod'], {})
+    f.columns = [c.replace('all__', 'prod__') for c in f.columns]
     assert len(f) == 4964 and f.index.is_unique
     one = f[f.n_ctx == 1]
     assert len(one) > 0
@@ -158,5 +159,5 @@ def test_stack_guarantees():
     seated = pred[pred.people >= 1]
     assert (seated.occ_prob >= 0.5 + 0.01 * seated.people.clip(upper=5)).all()
     assert pred.occ_prob.nunique() == len(pred)
-    assert (pred.hands == f['prod__hands__cur']).all()      # руки только по текущему кадру
+    assert (pred.hands == f['all__hands__cur']).all()      # руки только по текущему кадру
     assert (pred['items'] == 0).all()

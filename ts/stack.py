@@ -1,18 +1,25 @@
 """Стекер: правила счётчиков и модель `occ_prob` (раздел 11)."""
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from . import COUNTS, PRED_COLUMNS, SEED
-from .temporal import aggregate
+from .temporal import aggregate, merge_sources
 
 DEFAULTS = {
-    'source': 'prod',
+    'source': 'all',       # объединённый список объектов всех источников детекций (ts.temporal.merge_sources)
     # какой столбец агрегата идёт в счётчик: cur (текущий кадр) или med (правило раздела 10)
     'counts': {'people': 'cur', 'hands': 'cur', 'cups': 'cur', 'dishes': 'cur', 'items': None},
     'people_fill': True,   # правило раздела 10 для people: 0 сейчас, одинаково у соседей, есть руки
+    # голосование с признаками строк (11.1): {counter: {column: '<source>__<имя>', mode: median | replace | max}}
+    'vote': {},
+    'tune_people_area': True,
+    'tune_conf': True,     # подбирать пороги confidence для источников, кроме prod
+    'conf_grid': [round(0.05 * i, 2) for i in range(1, 19)],
     'occ_C': 1.0,
     'area_grid': [30000 + 2500 * i for i in range(21)],   # сетка порога площади бокса человека, px²
 }
@@ -33,6 +40,16 @@ def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     for counter in COUNTS:
         column = p['counts'].get(counter)
         out[counter] = features[f'{src}__{counter}__{column}'].to_numpy(float) if column else 0.0
+    for counter, rule in (p['vote'] or {}).items():
+        column, mode = rule['column'], rule.get('mode', 'median')
+        value = features[column].to_numpy(float)
+        ok_column = column.split('__')[0] + '__ok'
+        ok = (value >= 0) & (features[ok_column].to_numpy(float) == 1 if ok_column in features else True)
+        detector = out[counter].to_numpy(float)
+        context = features[f'{src}__{counter}__med'].to_numpy(float)
+        voted = {'median': np.median(np.stack([detector, value, context]), axis=0),
+                 'replace': value, 'max': np.maximum(detector, value)}[mode]
+        out[counter] = np.where(ok, voted, detector)
     if p['people_fill']:
         prev, nxt = features[f'{src}__people__prev'], features[f'{src}__people__next']
         fill = (out['people'] == 0) & (prev > 0) & (prev == nxt) & (features[f'{src}__hands__cur'] > 0)
@@ -98,32 +115,112 @@ def predict(model: dict, features: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return out.reset_index()[PRED_COLUMNS]
 
 
-def tune_people_area(assigned: pd.DataFrame, labels: pd.DataFrame, cfg: dict, rows: pd.DataFrame) -> tuple[float, dict]:
-    """Подобрать порог площади бокса человека по сумме |ошибки| people на `labels`.
-
-    Сетка `cfg['stack']['area_grid']`. При равенстве берётся середина самого
-    длинного плато оптимальных значений (11.1), а не край.
-    Возвращает `(порог, {порог: ошибка})`.
-    """
-    p = _cfg(cfg)
-    truth = labels.set_index('row_id')['people']
-    part_rows = rows[rows['row_id'].isin(truth.index)]
-    part = assigned[assigned['row_id'].isin(truth.index)]
-    errors = {}
-    for area in p['area_grid']:
-        local = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'people_max_area': area}}
-        counts = predict_counts(aggregate(part, local, part_rows).join(
-            part_rows[part_rows.dt == 0].set_index('row_id')[['is_ir']]), cfg)
-        errors[area] = float((counts['people'].reindex(truth.index) - truth).abs().sum())
+def _plateau_middle(grid: list, errors: dict) -> float:
+    """Середина самого длинного плато оптимальных значений сетки (11.1)."""
     best = min(errors.values())
     runs, run = [], []
-    for area in p['area_grid']:
-        if errors[area] == best:
-            run.append(area)
+    for value in grid:
+        if errors[value] == best:
+            run.append(value)
         elif run:
             runs.append(run)
             run = []
     if run:
         runs.append(run)
     longest = max(runs, key=len)
-    return float(longest[len(longest) // 2]), errors
+    return float(longest[len(longest) // 2])
+
+
+def _count_error(parts: list[pd.DataFrame], labels: pd.DataFrame, cfg: dict, rows: pd.DataFrame, counter: str) -> float:
+    """Сумма |ошибки| счётчика на строках `labels` при текущих порогах `cfg`."""
+    truth = labels.set_index('row_id')[counter]
+    part_rows = rows[rows['row_id'].isin(truth.index)]
+    local = [a[a['row_id'].isin(truth.index)] for a in parts]
+    features = aggregate(merge_sources(local, cfg), {**cfg, 'source': 'all'}, part_rows)
+    features = features.join(part_rows[part_rows['dt'] == 0].set_index('row_id')[['is_ir']])
+    counts = predict_counts(features, {**cfg, 'stack': {**cfg.get('stack', {}), 'vote': {}}})
+    return float((counts[counter].reindex(truth.index) - truth).abs().sum())
+
+
+def tune_people_area(parts: list[pd.DataFrame], labels: pd.DataFrame, cfg: dict, rows: pd.DataFrame) -> tuple[float, dict]:
+    """Подобрать порог площади бокса человека по сумме |ошибки| people на `labels`.
+
+    `parts`: привязанные объекты по источникам (`ts.features.assigned_for`).
+    Сетка `cfg['stack']['area_grid']`, при равенстве середина плато.
+    Возвращает `(порог, {порог: ошибка})`.
+    """
+    grid = _cfg(cfg)['area_grid']
+    errors = {}
+    for area in grid:
+        local = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'people_max_area': area}}
+        errors[area] = _count_error(parts, labels, local, rows, 'people')
+    return _plateau_middle(grid, errors), errors
+
+
+def tune_conf(parts: list[pd.DataFrame], labels: pd.DataFrame, cfg: dict, rows: pd.DataFrame) -> dict:
+    """Подобрать пороги confidence по одному на (источник, счётчик) для источников, кроме `prod`.
+
+    Покоординатно, в порядке источников: сетка `conf_grid`, критерий это сумма
+    |ошибки| счётчика на `labels` при объединении со всеми остальными
+    источниками, при равенстве середина плато. Возвращает
+    `{source: {counter: порог}}` (вкладывается в `cfg['temporal']['min_conf']`).
+    """
+    p = _cfg(cfg)
+    used = {c for c, column in p['counts'].items() if column}
+    min_conf = json.loads(json.dumps(cfg.get('temporal', {}).get('min_conf', {})))
+    for part in parts:
+        if not len(part) or part['source'].iloc[0] == 'prod':
+            continue
+        source = str(part['source'].iloc[0])
+        for counter in [c for c in COUNTS if c in used and (part['counter'] == c).any()]:
+            errors = {}
+            for thr in p['conf_grid']:
+                trial = {**min_conf, source: {**min_conf.get(source, {}), counter: thr}}
+                local = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'min_conf': trial}}
+                errors[thr] = _count_error(parts, labels, local, rows, counter)
+            min_conf.setdefault(source, {})[counter] = _plateau_middle(p['conf_grid'], errors)
+    return min_conf
+
+
+def make_fit_predict(cfg: dict, log: list | None = None):
+    """Функция `fit_predict(train_rows, predict_rows)` для `ts.cv` по источникам из `cfg['sources']`.
+
+    На строках подгонки: пороги confidence новых источников, порог площади
+    бокса человека, логрег занятости. Затем предсказание и `ts.post.apply`.
+    В `log` дописываются подобранные параметры каждого вызова.
+    """
+    from . import post
+    from .features import assigned_for, build_features, split_sources
+    from .rows import load_rows_ext
+
+    sources = list(cfg['sources'].get('dets', [])) + list(cfg['sources'].get('rowfeats', []))
+    dets, _ = split_sources(sources)
+    rows = load_rows_ext()
+    parts = [assigned_for(source, cfg) for source in dets]
+    p = _cfg(cfg)
+    counters = {'n': 0}
+
+    def fit_predict(train_rows: pd.DataFrame, predict_rows: pd.DataFrame) -> pd.DataFrame:
+        local = json.loads(json.dumps(cfg))
+        local.setdefault('temporal', {})
+        tuned = 0
+        if p['tune_conf'] and any(source != 'prod' for source in dets):
+            local['temporal']['min_conf'] = tune_conf(parts, train_rows, local, rows)
+            tuned += sum(len(v) for k, v in local['temporal']['min_conf'].items() if isinstance(v, dict))
+        if p['tune_people_area']:
+            local['temporal']['people_max_area'], _ = tune_people_area(parts, train_rows, local, rows)
+            tuned += 1
+        features = build_features(sources, local)
+        model = fit(features, train_rows, local)
+        counters['n'] = tuned + (len(model['columns']) + 1 if model['occ'] is not None else 0)
+        fit_predict.n_params = counters['n']
+        if log is not None:
+            log.append({'fit_dates': sorted(train_rows['date_utc'].unique()), 'n_fit_rows': len(train_rows),
+                        'people_max_area': local['temporal'].get('people_max_area'),
+                        'min_conf': local['temporal'].get('min_conf', {}),
+                        'occ_coef': model.get('coef'), 'occ_intercept': model.get('intercept')})
+        pred = predict(model, features.loc[predict_rows['row_id']], local)
+        return post.apply(pred, local)
+
+    fit_predict.n_params = None
+    return fit_predict
