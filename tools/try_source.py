@@ -53,26 +53,36 @@ def report_test_changes(base: str, donor: str, cols: list[str]) -> None:
           + ('  <-- МЕНЬШЕ 100: сабмит почти не отличается от базы' if total < 100 else ''))
 
 
-def report_bowls(source: str, cfg: dict) -> None:
-    """Сколько мисок источника отброшено правилом двойного счёта (тест, текущий кадр)."""
-    from ts.features import assigned_for
+def report_dishes(base: str, donor: str, cfg: dict) -> None:
+    """Посуда: сколько тарелок и мисок отброшено как уже посчитанные и сколько строк меняется без подноса."""
+    from ts.features import assigned_for, build_features
     from ts.temporal import merge_sources
     parts = [assigned_for(s, cfg) for s in cfg['sources']['dets']]
-    if not any((p['class_name'] == 'bowl').any() for p in parts if len(p)):
-        return
-    off = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'bowl_overlap_iou': None}}
     tables = io.load_tables().set_index('row_id')
+    off = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'bowl_overlap_iou': None}}
 
-    def bowls(c: dict) -> pd.Series:
+    def count(c: dict) -> pd.DataFrame:
         merged = merge_sources(parts, c)
-        merged = merged[(merged['class_name'] == 'bowl') & (merged['dt'] == 0)]
-        return merged['row_id'].map(tables['split']).value_counts()
+        merged = merged[merged['class_name'].isin(['plate', 'bowl']) & (merged['dt'] == 0)]
+        return merged.assign(split=merged['row_id'].map(tables['split'])).groupby(['split', 'class_name']).size()
 
-    before, after = bowls(off), bowls(cfg)
-    print('\nМиски после порога confidence из конфига, текущий кадр (до подбора порога на фолдах):')
-    for split in ['train', 'test']:
-        print(f"  {split}: всего {int(before.get(split, 0))}, отброшено как перекрытые подносом или чашкой "
-              f"(IoU >= {cfg['temporal'].get('bowl_overlap_iou')}): {int(before.get(split, 0) - after.get(split, 0))}")
+    before, after = count(off), count(cfg)
+    print('\nТарелки и миски (текущий кадр, пороги confidence из конфига, до подбора на фолдах):')
+    for key in sorted(set(before.index) | set(after.index)):
+        n, kept = int(before.get(key, 0)), int(after.get(key, 0))
+        print(f'  {key[0]:<5} {key[1]:<5}: всего {n}, отброшено как посуда на подносе или миска-чашка: {n - kept}')
+    if before.empty:
+        print('  в источниках нет классов plate и bowl')
+    test_ids = tables.index[tables['split'] == 'test']
+    trays = build_features(cfg['sources']['dets'], cfg).loc[test_ids, 'all__tray__cur']
+    a = io.read_csv_exact(pred_path(base)).set_index('row_id').loc[test_ids, 'dishes']
+    b = io.read_csv_exact(pred_path(donor)).set_index('row_id').loc[test_ids, 'dishes']
+    changed = (b - a).abs() > 1e-9
+    date = tables.loc[test_ids, 'date_utc']
+    print('Изменения dishes в тесте по наличию подноса (строк изменено / сумма разниц):')
+    for label, m in [('столы без подноса', trays == 0), ('столы с подносом', trays > 0)]:
+        by_day = {d[-5:]: int((changed & m & (date == d)).sum()) for d in sorted(date.unique())}
+        print(f'  {label}: {int((changed & m).sum())} строк из {int(m.sum())}, сумма {float((b - a)[m].sum()):+.1f}, по дням {by_day}')
 
 
 def main() -> None:
@@ -115,7 +125,8 @@ def main() -> None:
               f"{r['robust']['oof_all']['score']:>8.4f}{a['occupancy_ap']:>7.3f}"
               + ''.join(f"{a['quality'][c]:>8.3f}" for c in COUNTS))
     report_test_changes(args.base, full, args.cols)
-    report_bowls(args.source, cfg)
+    if 'dishes' in args.cols:
+        report_dishes(args.base, full, cfg)
     print()
     swap(args.base, full, args.cols, args.name, args.note, gate=not args.no_gate)
 
