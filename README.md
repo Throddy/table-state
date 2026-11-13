@@ -4,7 +4,7 @@
 `people, hands, cups, dishes, items` и `occ_prob`.
 
 Правила работы, форматы артефактов и задачи треков: **[CONTRACT.md](CONTRACT.md)** (читать целиком перед началом).
-План и роли: [PLAN.md](PLAN.md). Журнал экспериментов: [experiments/LOG.md](experiments/LOG.md).
+План и роли: [PLAN.md](PLAN.md). Журналы экспериментов по трекам: [experiments/LOG.md](experiments/LOG.md), одной таблицей: `python tools/log_all.py`.
 
 ## Окружение
 
@@ -106,13 +106,13 @@ ts/            общая библиотека (владелец A), ts/vendor/s
 tracks/core/   трек A      tracks/det/   трек B      tracks/ov/   трек C
 tools/         sanity, eval_pred, submit_gate, contact_sheet
 configs/       default.yaml и замороженные конфиги сабмитов
-experiments/   LOG.md, PROPOSALS.md, ORG_ANSWERS.md
+experiments/   LOG_core.md, LOG_det.md, LOG_ov.md (журналы треков), PROPOSALS.md, ORG_ANSWERS.md
 submissions/   <name>.csv + <name>.json        report/   отчёт, листы, слайды
 data/, artifacts/   не в git
 ```
 
 Зоны владения описаны в разделе 5 контракта: каждый трек пишет только в `tracks/<свой трек>/`,
-свои файлы в `artifacts/`, добавляет строки в конец `experiments/LOG.md` и `MODELS.md`.
+свои файлы в `artifacts/`, добавляет строки в конец журнала своего трека `experiments/LOG_<core|det|ov>.md` и в `MODELS.md`.
 
 ## Kaggle
 

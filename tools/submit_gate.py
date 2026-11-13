@@ -40,6 +40,7 @@ def main() -> int:
     parser.add_argument('--config', type=Path, default=ROOT / 'configs' / 'default.yaml')
     parser.add_argument('--name', help='имя сабмита, по умолчанию имя файла предсказаний')
     parser.add_argument('--bootstrap', type=int, default=1000)
+    parser.add_argument('--brief', action='store_true', help='печатать только oof_all, f25, f26 и robust')
     args = parser.parse_args()
     name = args.name or args.pred.stem
 
@@ -86,13 +87,16 @@ def main() -> int:
     }
     (out_dir / f'{name}.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
-    print(format_report(report))
+    text = format_report(report)
+    if args.brief:
+        text = '\n'.join(line for line in text.splitlines() if not line.startswith(('ir', 'robust/f', 'подгоняемых')))
+    print(text)
     print(f'\nGATE OK: {out_csv.relative_to(ROOT)} ({len(submission)} строк, occ_prob уникальных: {unique}), '
           f'карточка {name}.json, конфиг {config_copy.relative_to(ROOT)}')
     if dirty:
         print('ВНИМАНИЕ: в репозитории есть незакоммиченные изменения, git_sha в карточке неточен.')
     print('Отправка (делает A вручную, после неё дописать public_lb в карточку и строку в журнал):')
-    print(f'  kaggle competitions submit -c <слаг> -f submissions/{name}.csv -m "{name} {sha}"')
+    print(f'  kaggle competitions submit -c rascar-hack-case-2 -f submissions/{name}.csv -m "{name} {sha}"')
     return 0
 
 

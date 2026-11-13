@@ -13,7 +13,7 @@ ROWS_EXT_NAME = 'rows_ext.parquet'
 ROWS_EXT_COLUMNS = ['row_id', 'split', 'date_utc', 'frame_id', 'src_frame_id', 'dt',
                     'table_id', 'slot', 'x1', 'y1', 'x2', 'y2', 'n_tables', 'hour_msk', 'is_ir']
 # Средняя насыщенность HSV (0..1) уменьшенного кадра. Ниже порога кадр считается ИК (серым).
-# Порог подобран по гистограмме всех 1718 кадров, см. experiments/LOG.md.
+# Порог подобран по гистограмме всех 1718 кадров, см. experiments/LOG_core.md.
 IR_SAT_THRESHOLD = 0.05
 _SAT_SIZE = (160, 90)
 

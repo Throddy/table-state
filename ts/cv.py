@@ -140,7 +140,7 @@ def format_report(report: dict) -> str:
 
 
 def log_row(report: dict, who: str, name: str, change: str, conclusion: str, when: str = '') -> str:
-    """Строка для `experiments/LOG.md` в формате раздела 8.7."""
+    """Строка для журнала трека `experiments/LOG_<трек>.md` в формате раздела 8.7."""
     a = report['oof_all']
     cells = [when, who, name, change, f"{a['score']:.4f}", f"{report['f25']['score']:.4f}",
              f"{report['f26']['score']:.4f}", f"{a['occupancy_ap']:.3f}"]

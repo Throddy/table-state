@@ -25,7 +25,7 @@ def main() -> None:
 
     report = evaluate(args.pred, bootstrap=args.bootstrap)
     print(format_report(report))
-    print('\nСтрока для experiments/LOG.md (время, описание и вывод заполнить):')
+    print('\nСтрока для журнала своего трека experiments/LOG_<core|det|ov>.md (время, описание и вывод заполнить):')
     print(log_row(report, args.who, args.pred.stem, '<что изменено>', f'`python tools/eval_pred.py {args.pred}`'))
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)
