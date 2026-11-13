@@ -5,7 +5,8 @@
   2. прод-детекции с confidence >= 0.6 (person, hand, cup, tray) на кадрах выбранных дней;
   3. уверенные детекции трека C из задачи C5 (tray, phone, plate, что есть в файле): ART/labels/ov_pseudo__v<N>.parquet
      или --ov-pseudo;
-  4. только для v2 (B7): уверенные предсказания своего детектора v1 (--ft-pseudo ft_yolo__v1), confidence >= 0.6.
+  4. только для v2 (B7): уверенные предсказания своего детектора v1 (--ft-pseudo ft_yolo__v1), confidence >= 0.6,
+     для cup >= 0.8.
 Других источников нет. Боксы одного объекта из разных источников сливаются по правилу 9.2.6 контракта.
 
 Для каждого кадра делаются три вида: полный кадр, кропы зон top (×4) и wide (×2.5) каждого стола с
@@ -47,6 +48,10 @@ PROD_CLASSES = ['person', 'hand', 'cup', 'tray']     # что берём из п
 OV_CLASSES = ['tray', *OV_EXTRA]                     # что берём из псевдометок трека C (задача C5), если это есть в файле
 PSEUDO_CONF = 0.6                                    # B3: уверенные детекции идут в метки
 UNSURE_MIN = 0.2                                     # B3: 0.2–0.6 закрашивается, ниже 0.2 не учитывается
+# Порог для предсказаний своего детектора по классам (самообучение, B7). Для cup порог выше (решение роли A):
+# v1 находит стаканы на пустых столах, которых нет в разметке, размножать их в метках v2 нельзя.
+# Значение 0.8 выбрано заранее, по кадрам 25–26.10 не подбиралось. Боксы от 0.2 до порога закрашиваются.
+FT_PSEUDO_CONF = {'cup': 0.8}
 DEDUP_IOU, DEDUP_SMALL_PX, DEDUP_CENTER = 0.5, 40.0, 0.5   # правило 9.2.6: один и тот же объект
 MIN_VISIBLE = 0.5                                    # бокс остаётся в кропе, если видно не меньше половины площади
 MIN_SIDE_PX = 2.0                                    # и после обрезки он не тоньше 2 px кропа
@@ -356,10 +361,11 @@ def main() -> None:
     prod_labels = prod_labels.assign(src='prod')[LABEL_COLUMNS]
     ov = read_labels(ov_path, 'ov_pseudo', ov_classes, pseudo_ids)
     ft = read_labels(ft_path, 'ft', classes, pseudo_ids)
-    sure = pd.concat([prod_labels[prod_labels['confidence'] >= PSEUDO_CONF], ov, ft[ft['confidence'] >= PSEUDO_CONF]],
+    ft_thr = ft['class_name'].map(FT_PSEUDO_CONF).fillna(PSEUDO_CONF)
+    sure = pd.concat([prod_labels[prod_labels['confidence'] >= PSEUDO_CONF], ov, ft[ft['confidence'] >= ft_thr]],
                      ignore_index=True)
     unsure = pd.concat([prod_labels[prod_labels['confidence'] < PSEUDO_CONF],
-                        ft[(ft['confidence'] >= UNSURE_MIN) & (ft['confidence'] < PSEUDO_CONF)]], ignore_index=True)
+                        ft[(ft['confidence'] >= UNSURE_MIN) & (ft['confidence'] < ft_thr)]], ignore_index=True)
     sure_by = dict(tuple(sure.groupby('frame_id')))
     unsure_by = dict(tuple(unsure.groupby('frame_id')))
     tables_by = dict(tuple(prod[prod['class_name'] == 'table'].groupby('frame_id')))
@@ -420,6 +426,7 @@ def main() -> None:
             'ov_pseudo': {'file': None if ov_path is None else ov_path.name, 'classes': ov_classes,
                           'classes_in_file_on_pseudo_frames': ov_found, 'candidates': int(len(ov))},
             'ft': {'file': None if ft_path is None else ft_path.name, 'min_confidence': PSEUDO_CONF,
+                   'min_confidence_by_class': FT_PSEUDO_CONF,
                    'painted_from': UNSURE_MIN, 'candidates': int(len(ft))},
             'pseudo_frames': len(pseudo_ids),
             'labels_after_merge_by_source': labels_by_source,
