@@ -57,6 +57,9 @@ python tools/contact_sheet.py [--frames im_...] [--context]
 # опорное предсказание бейзлайна организаторов (режим calibrated)
 python tracks/core/base_calibrated.py
 
+# R1: прод-детекции, привязка v2, контекст, мягкий occ_prob
+python tracks/core/r1.py
+
 # проверка и регистрация сабмита (только роль A, на Kaggle не отправляет)
 python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
 
@@ -79,8 +82,8 @@ boxes_frame = to_frame_coords(boxes, meta)
 out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать артефакт
 ```
 
-Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check`.
-Заглушки до задач A3–A5: `assign, temporal, features, stack, post, viz`.
+Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack`.
+Заглушки: `post, viz`.
 
 ## Структура
 
