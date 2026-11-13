@@ -1,4 +1,5 @@
-# Зависимости треков B (det) и C (ov). Ставятся поверх requirements.txt:
+# С контракта 1.8 зависимости треков лежат в tracks/<трек>/requirements.txt, этот файл не дополняется.
+# Было: зависимости треков B (det) и C (ov). Ставятся поверх requirements.txt:
 #   pip install -r requirements.txt -r requirements-gpu.txt
 # Шаблон пустой: каждый трек дописывает свои пакеты с точными версиями
 # (torch, ultralytics, transformers и т. д.) и комментарием, для какой задачи.

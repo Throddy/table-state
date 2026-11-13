@@ -391,5 +391,11 @@
     },
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": null,
+  "status": "superseded",
+  "superseded_by": [
+    "AB_dishes",
+    "AB_hands"
+  ],
+  "status_note": "на Kaggle не отправляется: разделён на AB_dishes и AB_hands"
 }

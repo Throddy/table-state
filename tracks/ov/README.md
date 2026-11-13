@@ -18,4 +18,4 @@
 - `ts.rows.load_rows_ext()`: индекс строк с соседями (`dt`), рамкой, слотом и `is_ir`.
 - `python -m ts.check dets <файл>` и `python -m ts.check rowfeats <файл>`: проверка формата перед публикацией артефакта.
 
-Зависимости трека дописываются в `requirements-gpu.txt`, модели в `MODELS.md`.
+Зависимости трека кладутся в `tracks/ov/requirements.txt` (с точными версиями), модели в `MODELS.md`.
