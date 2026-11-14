@@ -101,6 +101,7 @@ def report_dishes(base: str, donor: str, cfg: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--source', required=True, nargs='+', help='имена файлов ART/dets/<source>__v<N> без расширения (один или несколько)')
+    parser.add_argument('--keep-vote', action='store_true', help='не выключать голосование с rowfeats для колонки (например max с посудой OWLv2)')
     parser.add_argument('--drop', nargs='+', default=[], help='убрать эти источники основы (например ft_yolo__v1 при проверке v2)')
     parser.add_argument('--classes', nargs='+', help='взять от новых источников только эти классы словаря 8.2')
     parser.add_argument('--cols', nargs='+', required=True, help='колонки, которые берём из сборки с источником')
@@ -132,7 +133,7 @@ def main() -> None:
     if args.classes:
         cfg['sources']['classes'] = {**(cfg['sources'].get('classes') or {}), **{source: list(args.classes) for source in args.source}}
     for column in args.cols:      # колонка считается по детекциям, прежнее голосование с rowfeats для неё выключается
-        if (cfg['stack'].get('vote') or {}).get(column):
+        if (cfg['stack'].get('vote') or {}).get(column) and not args.keep_vote:
             cfg['stack']['vote'][column] = None
     for item in args.set:
         node, keys = cfg, item.split('=', 1)[0].split('.')
