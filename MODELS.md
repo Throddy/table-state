@@ -12,3 +12,14 @@
 | Ultralytics YOLO11x-pose (COCO keypoints) | запястья для источника `pose` (руки, B5) | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11x-pose.pt, копия в Kaggle Dataset `ts-models` | релиз `v8.4.0`, файл `yolo11x-pose.pt`, sha256 `013c43543b0751b8918486ba96e01ee44a59040683a07f96cc22bcc2cb7785f8` | AGPL-3.0 | B |
 | ft_yolo_v1 (свой детектор, дообученный YOLO11m) | детекции `ft_yolo__v1`: person, hand, cup, tray | Kaggle Dataset `ts-models`, файл `ft_yolo_v1.pt` с карточкой `ft_yolo_v1.json`; обучение `python tracks/det/train.py --config tracks/det/configs/ft_yolo_v1.yaml` | sha256 в карточке `ft_yolo_v1.json`; стартовые веса `yolo11m.pt` релиза `v8.4.0` | AGPL-3.0 (производные от весов Ultralytics) | B |
 | ft_yolo_v2 (свой детектор, самообучение, дообученный YOLO11m) | детекции `ft_yolo__v2`: person, hand, cup, tray, phone | Kaggle Dataset `ts-models`, файл `ft_yolo_v2.pt` с карточкой `ft_yolo_v2.json`; обучение `python tracks/det/train.py --config tracks/det/configs/ft_yolo_v2.yaml` | sha256 в карточке `ft_yolo_v2.json`; стартовые веса `yolo11m.pt` релиза `v8.4.0` | AGPL-3.0 (производные от весов Ultralytics) | B |
+| Qwen3-VL-4B-Instruct | VLM-счётчик по широкому кропу стола, признаки строк `vlm_qwen__v1` (people, items) | Kaggle Models `qwen-lm/qwen-3-vl`, вариант `transformers/4b-instruct`, версия 1; исходные веса https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct | Kaggle Models версия 1; sha256 весов совпадает с ревизией Hugging Face `ebb281ec` (проверка в `experiments/LOG_det.md`); FP16, `do_sample=False` | Apache-2.0 | B, запись A |
+
+## Где посчитаны кэши детекций и признаков
+
+Финальный запуск (`run.py`, `notebooks/final_inference.ipynb`) читает детекции и признаки строк из кэша и сами модели не запускает. Каждый кэш получен ноутбуком Kaggle с зафиксированной версией:
+
+| кэш | модель | ноутбук и версия | датасет с кэшем |
+|---|---|---|---|
+| `dets/ov_gdino__v1`, `dets/ov_owl__v1`, `rowfeats/ov_counts__v1` | Grounding DINO base (Hugging Face, коммит `12bdfa3120f3e7ec7b434d90674b3396eccf88eb`), OWLv2 large patch14 ensemble (коммит `95e26936e865f87db1742128404b3c035d47d89d`) | https://www.kaggle.com/code/throddy/notebookc45eeb95e0?scriptVersionId=369282247 | `throddy/ts-artifacts-ov-pseudo` |
+| `dets/ft_yolo__v1` | ft_yolo_v1 | ноутбук `tracks/det/kaggle/det_train_ft_yolo.ipynb` на аккаунте трека B | `victimestsate/ts-artifacts-dets` |
+| `rowfeats/vlm_qwen__v1` | Qwen3-VL-4B-Instruct | шарды: https://www.kaggle.com/code/throddy/notebook15b164940c?scriptVersionId=369589586 и ноутбук трека B (`tracks/det/kaggle/det_vlm_all_a.ipynb`, `det_vlm_all_b.ipynb`) | `victimestsate/ts-artifacts-dets` |
