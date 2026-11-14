@@ -4,9 +4,11 @@
 
 Для каждого финала вызывает run.py с замороженным конфигом из configs/submissions/ и сравнивает
 результат с submissions/<имя>.csv. Пять счётчиков должны совпасть побайтно. occ_prob допускает
-расхождение до 1e-12 при одинаковом порядке строк: бейзлайн организаторов (ExtraTrees, n_jobs=2)
-складывает деревья в двух потоках, и младшие биты меняются от запуска к запуску. Скор от этого
-не меняется, потому что AP зависит только от порядка.
+расхождение до 1e-12 при одинаковом порядке строк после округления до 12 знаков: бейзлайн организаторов
+(ExtraTrees, n_jobs=2) складывает деревья в двух потоках, и младшие биты меняются от запуска к запуску.
+Из-за этого строки с равными до 1e-12 значениями иногда получают ничью в одном прогоне и разный ранг
+в другом. AP меняется только внутри таких групп; в прогоне на Kaggle 15.11 у VLM_items их было 11 строк,
+худший случай по всем разметкам этих строк сдвигает скор на 6e-6.
 """
 from __future__ import annotations
 
@@ -34,7 +36,7 @@ def compare(new: pd.DataFrame, saved: pd.DataFrame) -> list[str]:
         if changed:
             problems.append(f'{column}: отличается в {changed} строках')
     diff = (new['occ_prob'] - saved['occ_prob']).abs().max()
-    same_order = (new['occ_prob'].rank(method='min') == saved['occ_prob'].rank(method='min')).all()
+    same_order = (new['occ_prob'].round(12).rank(method='min') == saved['occ_prob'].round(12).rank(method='min')).all()
     if diff > 1e-12 or not same_order:
         problems.append(f'occ_prob: максимум расхождения {diff:.3g}, порядок {"тот же" if same_order else "другой"}')
     return problems
