@@ -473,5 +473,6 @@
     "n_params": null
   },
   "public_lb": 0.74357,
-  "public_lb_delta_vs_COMBO": 0.04363
+  "public_lb_delta_vs_COMBO": 0.04363,
+  "final_selected": true
 }
