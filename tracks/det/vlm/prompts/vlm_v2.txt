@@ -1,0 +1,14 @@
+This is a frame from a fixed camera mounted high in a cafe, looking down at a row of tables. One table is outlined with a thin red rectangle: this is the target table. Other tables may be visible; ignore everything that belongs to them.
+
+Count only what is clearly visible for the target table:
+
+- "people": people sitting at the target table or standing right next to it (guests, children, staff). A person sitting behind the far side of the tabletop belongs to the table. Do not count people walking by in the aisle.
+- "hands": bare hands visible above the tabletop of the target table, each hand counted separately. Do not count hands under the table, on the lap, in gloves, or near the face above the table.
+- "cups": cups, mugs, glasses and takeaway cups on the target table or held in a hand above it. Do not count bottles, cans, or the small vase with dried flowers.
+- "dishes": plates, bowls and trays, each item counted separately (a tray with two plates is 3). Do not count cups, napkins, or food without a dish.
+- "items": personal belongings on the tabletop: phones, bags, wallets, headphones, papers, keys and similar things, including a phone held in a hand above the table. Do not count laptops, tablets, decor, toys, things lying on a chair or on the sofa, or clothes on a chair back.
+
+Every table has a small vase with dried flowers. It is decor: never count it as a cup or as an item. A laptop is not an item. A bottle is not a cup.
+
+Answer with JSON only, in exactly this form, replacing each N with a non-negative integer:
+{"people":N,"hands":N,"cups":N,"dishes":N,"items":N}

@@ -10,5 +10,5 @@ Count only what is clearly visible for the target table:
 
 Every table has a small vase with dried flowers. It is decor: never count it as a cup or as an item. A laptop is not an item. A bottle is not a cup.
 
-Answer with JSON only, in exactly this form, replacing each N with a non-negative integer:
-{"people":N,"hands":N,"cups":N,"dishes":N,"items":N}
+Answer with JSON only, exactly in this form and with non-negative integers:
+{"people":0,"hands":0,"cups":0,"dishes":0,"items":0}

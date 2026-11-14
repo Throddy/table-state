@@ -7,7 +7,7 @@
 Отладка и шаг 1 задачи C3: --subset train (231 строка, файл с суффиксом __train, без ts.check).
 
 Вход модели: широкий кроп строки (ts.crops, kind='wide', ×2.5) с тонкой красной рамкой целевого стола,
-длинная сторона приведена к 1024. Промпт: tracks/det/vlm/prompts/vlm_v1.txt. Генерация без сэмплирования,
+длинная сторона приведена к 1024. Промпт: tracks/det/vlm/prompts/<--prompt-id>.txt. Генерация без сэмплирования,
 не больше 128 новых токенов. Ответ, который не разобрался как JSON с пятью целыми, даёт −1 и __ok = 0.
 Возобновление: каждый ответ сразу дописывается в ART/rowfeats/_parts/<имя>/shard_<i>_of_<n>.jsonl,
 повторный запуск пропускает готовые строки. Сеть не используется, веса читаются из каталога.
@@ -33,8 +33,8 @@ from ts.crops import crop_table, to_crop_coords  # noqa: E402
 from ts.rows import load_rows_ext  # noqa: E402
 
 SOURCE = 'vlm_qwen'
-PROMPT_ID = 'vlm_v1'
-PROMPT_FILE = Path(__file__).resolve().parent / 'prompts' / f'{PROMPT_ID}.txt'
+PROMPTS = Path(__file__).resolve().parent / 'prompts'
+# vlm_v1: образец ответа с нулями (на нём считался шаг 1); vlm_v2: образец с буквой N вместо чисел.
 LONG_SIDE = 1024
 WIDE_SCALE = 2.5
 MAX_NEW_TOKENS = 128
@@ -106,7 +106,7 @@ def run(args, name: str) -> None:
     model = AutoModelForImageTextToText.from_pretrained(str(args.model), local_files_only=True,
                                                         dtype=getattr(torch, args.dtype), device_map={'': args.device})
     model.eval()
-    prompt = PROMPT_FILE.read_text(encoding='utf-8').strip()
+    prompt = (PROMPTS / f'{args.prompt_id}.txt').read_text(encoding='utf-8').strip()
     out = folder / f'shard_{args.shard}_of_{args.of}.jsonl'
     started = time.time()
     with open(out, 'a', encoding='utf-8') as sink:
@@ -117,7 +117,7 @@ def run(args, name: str) -> None:
             with torch.inference_mode():
                 ids = model.generate(**inputs, do_sample=False, max_new_tokens=MAX_NEW_TOKENS)
             text = processor.batch_decode(ids[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)[0]
-            sink.write(json.dumps({'row_id': row.row_id, 'dt': 0, 'prompt_id': PROMPT_ID, 'text': text}, ensure_ascii=False) + '\n')
+            sink.write(json.dumps({'row_id': row.row_id, 'dt': 0, 'prompt_id': args.prompt_id, 'text': text}, ensure_ascii=False) + '\n')
             sink.flush()
             if n % 25 == 0 or n == len(todo):
                 rate = (time.time() - started) / n
@@ -151,7 +151,7 @@ def merge(args, name: str) -> None:
             'coverage': 'all' if args.subset == 'all' else 'train_only', 'rows': len(table),
             'not_ok_share': round(float((table[f'{SOURCE}__ok'] == 0).mean()), 4),
             'manual_labels_used': False, 'uses_train_counters': False,
-            'params': {'prompt': f'tracks/det/vlm/prompts/{PROMPT_ID}.txt', 'crop': 'wide', 'scale': WIDE_SCALE, 'long_side': LONG_SIDE,
+            'params': {'prompt': sorted({f'tracks/det/vlm/prompts/{r["prompt_id"]}.txt' for r in raw}), 'crop': 'wide', 'scale': WIDE_SCALE, 'long_side': LONG_SIDE,
                        'do_sample': False, 'max_new_tokens': MAX_NEW_TOKENS, 'dtype': args.dtype, 'seed': common.SEED},
             'notes': 'счётчики VLM по широкому кропу с рамкой целевого стола; −1 и __ok = 0, если ответ не разобран'}
     path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
@@ -171,6 +171,7 @@ def main() -> None:
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16', help='float32 только для отладки на CPU')
     parser.add_argument('--version', type=int, default=1)
+    parser.add_argument('--prompt-id', default='vlm_v1', help='имя файла промпта в tracks/det/vlm/prompts без расширения')
     parser.add_argument('--limit', type=int, default=0, help='отладка: не больше N строк за запуск')
     parser.add_argument('--merge', action='store_true', help='собрать rowfeats из готовых шардов')
     args = parser.parse_args()
