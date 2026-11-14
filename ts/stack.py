@@ -272,8 +272,8 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                 continue
             rows_ = features.loc[pred['row_id']]
             mode = rule.get('mode', 'replace')
-            if mode not in ('replace', 'max'):
-                raise ValueError(f'overrides.{column}: режим {mode!r}, допустимы replace и max')
+            if mode not in ('replace', 'max', 'avg'):
+                raise ValueError(f'overrides.{column}: режим {mode!r}, допустимы replace, max и avg')
             ok_column = rule['column'].split('__')[0] + '__ok'
             if ok_column not in rows_:
                 raise ValueError(f'overrides.{column}: нет колонки {ok_column}, без неё ответы источника не проверить')
@@ -281,8 +281,12 @@ def make_fit_predict(cfg: dict, log: list | None = None):
             ok = np.isfinite(raw_value) & (raw_value >= 0) & (rows_[ok_column].to_numpy(float) == 1)
             value = np.clip(np.nan_to_num(raw_value), 0, 50)
             current = pred[column].to_numpy(float)
-            new = value if mode == 'replace' else np.maximum(current, value)
+            new = {'replace': value, 'max': np.maximum(current, value), 'avg': 0.5 * current + 0.5 * value}[mode]
             pred[column] = np.where(ok, new, current)
+        if cfg.get('overrides'):
+            # Правила по людям (hands_need_people, hands_cap) и обрезка ещё раз: заменённые колонки проходят их
+            # по people сборки. Для незаменённых колонок повтор ничего не меняет.
+            pred = post.apply(pred, local)
         return pred
 
     fit_predict.n_params = None
