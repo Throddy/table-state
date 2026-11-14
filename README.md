@@ -23,7 +23,7 @@
    ```bash
    git clone https://github.com/Throddy/table-state.git
    cd table-state
-   python3.12 -m venv .venv          # или: uv venv --python 3.12 .venv
+   python3.12 -m venv .venv          # или: uv venv --python 3.12 --seed .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```

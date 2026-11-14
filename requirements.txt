@@ -9,6 +9,7 @@ pyarrow==26.0.1
 pyyaml==6.0.3
 # скачивание данных и кэшей с Kaggle (tools/fetch_artifacts.py)
 kaggle==2.2.4
+six==1.17.0          # нужен kaggle 2.2.4, но не указан в его зависимостях
 # тесты и гистограмма площадей боксов (tools/person_area_hist.py)
 pytest==9.2.0
 matplotlib==3.11.2
