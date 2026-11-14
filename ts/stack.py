@@ -265,6 +265,18 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                 # он выпуклый: среднее двух прогнозов не хуже среднего их ошибок, а при ошибках разного знака лучше обоих.
                 pred[column] = {'baseline': values, 'baseline_max': np.maximum(values, own),
                                 'baseline_avg': 0.5 * values + 0.5 * own}[compose[column]]
+        # Финальные замены колонок счётчиком из rowfeats (например VLM). Применяются после постобработки:
+        # правила по людям для рук и вещей уже отработали на people сборки и от замены people не меняются.
+        for column, rule in (cfg.get('overrides') or {}).items():
+            if not rule:
+                continue
+            rows_ = features.loc[pred['row_id']]
+            value = rows_[rule['column']].to_numpy(float)
+            ok_column = rule['column'].split('__')[0] + '__ok'
+            ok = (value >= 0) & (rows_[ok_column].to_numpy(float) == 1 if ok_column in rows_ else True)
+            current = pred[column].to_numpy(float)
+            new = {'replace': value, 'max': np.maximum(current, value)}[rule.get('mode', 'replace')]
+            pred[column] = np.where(ok, new, current)
         return pred
 
     fit_predict.n_params = None
