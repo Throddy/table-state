@@ -44,10 +44,26 @@ def split_sources(sources: list[str]) -> tuple[list[str], list[str]]:
     return dets, rowfeats
 
 
+def source_parts(sources: list[str], cfg: dict | None = None) -> list[pd.DataFrame]:
+    """Привязанные объекты по источникам детекций с учётом `cfg['sources']['counters']`.
+
+    `sources.counters: {<source>: [hands, cups]}` оставляет от источника только объекты перечисленных
+    счётчиков: так новый источник меняет ровно одну колонку, а остальные считаются по прежним.
+    """
+    dets, _ = split_sources(sources)
+    limits = ((cfg or {}).get('sources') or {}).get('counters') or {}
+    parts = []
+    for source in dets:
+        part = assigned_for(source, cfg)
+        if source in limits:
+            part = part[part['counter'].isin(limits[source])]
+        parts.append(part)
+    return parts
+
+
 def merged_assigned(sources: list[str], cfg: dict | None = None) -> pd.DataFrame:
     """Объединённый список объектов всех источников детекций (`source = 'all'`)."""
-    dets, _ = split_sources(sources)
-    return merge_sources([assigned_for(source, cfg) for source in dets], cfg)
+    return merge_sources(source_parts(sources, cfg), cfg)
 
 
 def build_features(sources: list[str], cfg: dict) -> pd.DataFrame:
@@ -66,7 +82,7 @@ def build_features(sources: list[str], cfg: dict) -> pd.DataFrame:
     out = current[META_COLUMNS].astype(float).copy()
     out['n_ctx'] = (rows.groupby('row_id').size() - 1).reindex(out.index).astype(float)
     dets, rowfeats = split_sources(sources)
-    merged = merge_sources([assigned_for(source, cfg) for source in dets], cfg)
+    merged = merge_sources(source_parts(sources, cfg), cfg)
     out = out.join(aggregate(merged, {**(cfg or {}), 'source': 'all'}, rows).reindex(out.index), how='left')
     for source in rowfeats:
         path = paths.ART / 'rowfeats' / f'{source}.parquet'

@@ -199,13 +199,13 @@ def make_fit_predict(cfg: dict, log: list | None = None):
     В `log` дописываются подобранные параметры каждого вызова.
     """
     from . import post
-    from .features import assigned_for, build_features, split_sources
+    from .features import build_features, source_parts, split_sources
     from .rows import load_rows_ext
 
     sources = list(cfg['sources'].get('dets', [])) + list(cfg['sources'].get('rowfeats', []))
     dets, _ = split_sources(sources)
     rows = load_rows_ext()
-    parts = [assigned_for(source, cfg) for source in dets]
+    parts = source_parts(sources, cfg)
     p = _cfg(cfg)
     counters = {'n': 0}
 
@@ -228,7 +228,18 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                         'people_max_area': local['temporal'].get('people_max_area'),
                         'min_conf': local['temporal'].get('min_conf', {}),
                         'occ_coef': model.get('coef'), 'occ_intercept': model.get('intercept')})
-        pred = post.apply(predict(model, features.loc[predict_rows['row_id']], local), local)
+        raw = predict(model, features.loc[predict_rows['row_id']], local)
+        limits = (cfg['sources'].get('counters') or {})
+        if limits:
+            # Источник с ограничением sources.counters меняет только перечисленные колонки: остальные
+            # (включая people, от которого зависят правила по рукам, и occ_prob) считаются сборкой без него.
+            keep_new = {c for counters_ in limits.values() for c in counters_}
+            rest = [source for source in sources if source not in limits]
+            base_features = build_features(rest, local)
+            base_raw = predict(fit(base_features, train_rows, local), base_features.loc[predict_rows['row_id']], local)
+            for column in [c for c in PRED_COLUMNS[1:] if c not in keep_new]:
+                raw[column] = base_raw[column].to_numpy(float)
+        pred = post.apply(raw, local)
         compose = cfg.get('compose') or {}
         unknown = set(compose.values()) - {'stack', 'baseline'}
         if unknown:

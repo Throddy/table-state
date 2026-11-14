@@ -55,9 +55,9 @@ def report_test_changes(base: str, donor: str, cols: list[str]) -> None:
 
 def report_dishes(base: str, donor: str, cfg: dict) -> None:
     """Посуда: сколько тарелок и мисок отброшено как уже посчитанные и сколько строк меняется без подноса."""
-    from ts.features import assigned_for, build_features
+    from ts.features import build_features, source_parts
     from ts.temporal import merge_sources
-    parts = [assigned_for(s, cfg) for s in cfg['sources']['dets']]
+    parts = source_parts(cfg['sources']['dets'], cfg)
     tables = io.load_tables().set_index('row_id')
     off = {**cfg, 'temporal': {**cfg.get('temporal', {}), 'bowl_overlap_iou': None}}
 
@@ -92,6 +92,9 @@ def main() -> None:
     parser.add_argument('--base', required=True, help='базовое предсказание ART/preds/<base>.csv')
     parser.add_argument('--name', required=True, help='имя итогового сабмита')
     parser.add_argument('--alone', action='store_true', help='собирать только из нового источника, без prod')
+    parser.add_argument('--all-counters', action='store_true',
+                        help='источник участвует во всех счётчиках сборки (по умолчанию только в --cols, '
+                             'чтобы остальные колонки, включая people для постобработки, считались как в основе)')
     parser.add_argument('--config', type=Path, default=ROOT / 'configs' / 'default.yaml')
     parser.add_argument('--note')
     parser.add_argument('--set', action='append', default=[], metavar='ключ=значение',
@@ -103,6 +106,8 @@ def main() -> None:
     print(f'ts.check: {args.source} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
     cfg['sources']['dets'] = [args.source] if args.alone else ['prod', args.source]
+    if not args.all_counters and not args.alone:
+        cfg['sources']['counters'] = {args.source: [c for c in args.cols if c in COUNTS]}
     for item in args.set:
         node, keys = cfg, item.split('=', 1)[0].split('.')
         for key in keys[:-1]:

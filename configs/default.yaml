@@ -6,6 +6,7 @@ seed: 419
 sources:
   dets: [prod]
   rowfeats: []
+  # counters: {ft_yolo__v1: [hands]}   # какие счётчики берутся от источника (по умолчанию все его классы)
 
 slots:
   edges: [0, 275, 450, 690, 925, 1140, 1300]
