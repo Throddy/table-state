@@ -1,4 +1,4 @@
-"""Привязка объектов к столам (разделы 7.6 и 9)."""
+"""Привязка объектов к столам."""
 from __future__ import annotations
 
 import numpy as np

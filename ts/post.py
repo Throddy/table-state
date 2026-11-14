@@ -1,4 +1,4 @@
-"""Постобработка предсказаний по флагам `cfg['post']` (раздел 11.3)."""
+"""Постобработка предсказаний по флагам `cfg['post']`."""
 from __future__ import annotations
 
 import numpy as np
@@ -42,7 +42,7 @@ def apply(pred: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     p = _cfg(cfg)
     out = pred.copy()
     if p['empty_night']:
-        raise NotImplementedError('post.empty_night не реализован и не проверен (раздел 11.3)')
+        raise NotImplementedError('post.empty_night не реализован и не проверен')
     if p['items_prior'] and (p['items_prior_floor'] or not has_items_source(cfg)):
         lift = (out['people'] >= 1) & (out['items'] < 1)
         out.loc[lift, 'items'] = 1.0

@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'experiments'))
 import eval_dets  # noqa: E402
 import make_pseudo  # noqa: E402
 import run_ov  # noqa: E402

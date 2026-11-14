@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image, ImageDraw
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
 from contact_sheet import load_font  # noqa: E402  (добавляет корень репозитория в sys.path)
 
 from ts import COUNTS, io, paths  # noqa: E402

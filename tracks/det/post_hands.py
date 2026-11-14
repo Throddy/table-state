@@ -1,4 +1,4 @@
-"""Вариант проверочного файла с постобработкой рук: hands_need_people и hands_cap (флаги раздела 11.3).
+"""Вариант проверочного файла с постобработкой рук: hands_need_people и hands_cap (флаги `post` конфига).
 
 Запуск: python tracks/det/post_hands.py --pred AB_ft_hands --name AB_ft_hands_pp
 Берёт ART/preds/<pred>.csv (4964 строки), применяет `ts.post.apply` с двумя флагами (people берётся из

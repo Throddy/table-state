@@ -1,4 +1,4 @@
-"""Главный индекс строк `rows_ext.parquet` (разделы 7.4 и 8.3)."""
+"""Главный индекс строк `rows_ext.parquet`."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor

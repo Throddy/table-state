@@ -1,4 +1,4 @@
-"""Зоны стола top / seat / wide (разделы 7.5 и 9.1)."""
+"""Зоны стола top / seat / wide."""
 from __future__ import annotations
 
 from typing import Sequence

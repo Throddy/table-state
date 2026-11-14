@@ -1,13 +1,13 @@
-"""Датасет своего детектора в формате YOLO (задачи B2, B3 «псевдо» и B7). Ручной разметки нет.
+"""Датасет своего детектора в формате YOLO (aux, псевдометки и самообучение). Ручной разметки нет.
 
 Источники боксов:
   1. aux как есть (aux_boxes.csv, маппинг 8.2);
   2. прод-детекции с confidence >= 0.6 (person, hand, cup, tray) на кадрах выбранных дней;
-  3. уверенные детекции трека C из задачи C5 (tray, phone, plate, что есть в файле): ART/labels/ov_pseudo__v<N>.parquet
+  3. уверенные псевдометки трека C (tray, phone, plate, что есть в файле): ART/labels/ov_pseudo__v<N>.parquet
      или --ov-pseudo;
   4. только для v2 (B7): уверенные предсказания своего детектора v1 (--ft-pseudo ft_yolo__v1), confidence >= 0.6,
      для cup >= 0.8.
-Других источников нет. Боксы одного объекта из разных источников сливаются по правилу 9.2.6 контракта.
+Других источников нет. Боксы одного объекта из разных источников сливаются, если это один объект (IoU не меньше 0.5, для мелких боксов близость центров).
 
 Для каждого кадра делаются три вида: полный кадр, кропы зон top (×4) и wide (×2.5) каждого стола с
 пересчитанными боксами. Столы на aux это боксы table из aux, на остальных кадрах детекции table прод-детектора.
@@ -43,9 +43,9 @@ from ts.crops import crop_region, to_crop_coords
 from ts.geometry import clip_box, zone
 from ts.slots import slot_of
 
-VIEWS = {'full': None, 'top': 4.0, 'wide': 2.5}     # вид -> увеличение кропа (раздел 9.1)
+VIEWS = {'full': None, 'top': 4.0, 'wide': 2.5}     # вид -> увеличение кропа
 PROD_CLASSES = ['person', 'hand', 'cup', 'tray']     # что берём из прод-детектора
-OV_CLASSES = ['tray', *OV_EXTRA]                     # что берём из псевдометок трека C (задача C5), если это есть в файле
+OV_CLASSES = ['tray', *OV_EXTRA]                     # что берём из псевдометок трека C, если это есть в файле
 PSEUDO_CONF = 0.6                                    # B3: уверенные детекции идут в метки
 UNSURE_MIN = 0.2                                     # B3: 0.2–0.6 закрашивается, ниже 0.2 не учитывается
 # Порог для предсказаний своего детектора по классам (самообучение, B7). Для cup порог выше (решение роли A):
@@ -151,7 +151,7 @@ def pick_holdout(objects: pd.DataFrame, aux_frames: pd.DataFrame) -> tuple[list[
 
     Сначала кадры, где есть и тарелки, и телефоны; если их меньше шести, добираются кадры с тарелками,
     затем с телефонами. Внутри группы порядок случайный с сидом 419. Кадр, отстоящий от уже выбранного
-    не больше чем на 30 с, в holdout не берётся, а из обучения убирается (та же сцена, аналог правила R4).
+    не больше чем на 30 с, в holdout не берётся, а из обучения убирается (та же сцена не делится между обучением и проверкой).
     """
     counts = objects.pivot_table(index='frame_id', columns='class_name', values='det_id', aggfunc='size', fill_value=0)
     counts = counts.reindex(index=sorted(aux_frames['frame_id']), columns=['plate', 'phone'], fill_value=0)
@@ -330,7 +330,7 @@ def main() -> None:
                     .value_counts().sort_index().items()}
     if args.classes == 'auto':
         if ov_path is None:
-            raise SystemExit('Для --classes auto нужен файл псевдометок трека C (задача C5): положите '
+            raise SystemExit('Для --classes auto нужен файл псевдометок трека C: положите '
                              'ART/labels/ov_pseudo__v<N>.parquet или укажите --ov-pseudo.')
         classes = CLASS_SETS['v1'] + [c for c in OV_EXTRA if ov_found.get(c, 0) > 0]
     else:

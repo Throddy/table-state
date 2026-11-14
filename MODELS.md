@@ -1,25 +1,27 @@
-# MODELS.md
+# Модели
 
-Каждая модель заносится сюда в момент первого использования (раздел 15.2 контракта).
-Только добавление строк в конец.
+Все модели открытые, веса закреплены по файлу релиза, коммиту Hugging Face или sha256. При инференсе сеть не используется.
 
-| модель | для чего | ссылка на веса | ревизия / файл | лицензия | кто добавил |
-|---|---|---|---|---|---|
-| Ultralytics YOLO11x (COCO) | детекции без обучения: `coco_person` (person на полном кадре), `coco_crop` (кропы столов) | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11x.pt, копия в Kaggle Dataset `ts-models` | релиз `v8.4.0`, файл `yolo11x.pt`, sha256 `7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24` | AGPL-3.0 | B |
-| Ultralytics YOLO11m (COCO) | стартовые веса дообучения `ft_yolo_v1` (B4) | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11m.pt, копия в Kaggle Dataset `ts-models` | релиз `v8.4.0`, файл `yolo11m.pt`, sha256 `d5ffc1a674953a08e11a8d21e022781b1b23a19b730afc309290bd9fb5305b95` | AGPL-3.0 | B |
-| Grounding DINO base | zero-shot детекция посуды и вещей на кропах `top` ×4, источник `ov_gdino` (C2), псевдометки (C5) | https://huggingface.co/IDEA-Research/grounding-dino-base | коммит `12bdfa3120f3e7ec7b434d90674b3396eccf88eb`, `model.safetensors`; скачивает `tracks/ov/fetch_weights.py` в `artifacts/models/ov_gdino/`; Kaggle Dataset пока не опубликован | Apache-2.0 (карточка модели, проверено 13.11) | C |
-| OWLv2 large patch14 ensemble | zero-shot детекция посуды и вещей на кропах `top` ×4, источник `ov_owl` (C2), псевдометки (C5) | https://huggingface.co/google/owlv2-large-patch14-ensemble | коммит `95e26936e865f87db1742128404b3c035d47d89d`, `model.safetensors`; скачивает `tracks/ov/fetch_weights.py` в `artifacts/models/ov_owl/`; Kaggle Dataset пока не опубликован | Apache-2.0 (карточка модели, проверено 13.11) | C |
-| Ultralytics YOLO11x-pose (COCO keypoints) | запястья для источника `pose` (руки, B5) | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11x-pose.pt, копия в Kaggle Dataset `ts-models` | релиз `v8.4.0`, файл `yolo11x-pose.pt`, sha256 `013c43543b0751b8918486ba96e01ee44a59040683a07f96cc22bcc2cb7785f8` | AGPL-3.0 | B |
-| ft_yolo_v1 (свой детектор, дообученный YOLO11m) | детекции `ft_yolo__v1`: person, hand, cup, tray | Kaggle Dataset `ts-models`, файл `ft_yolo_v1.pt` с карточкой `ft_yolo_v1.json`; обучение `python tracks/det/train.py --config tracks/det/configs/ft_yolo_v1.yaml` | sha256 в карточке `ft_yolo_v1.json`; стартовые веса `yolo11m.pt` релиза `v8.4.0` | AGPL-3.0 (производные от весов Ultralytics) | B |
-| ft_yolo_v2 (свой детектор, самообучение, дообученный YOLO11m) | детекции `ft_yolo__v2`: person, hand, cup, tray, phone | Kaggle Dataset `ts-models`, файл `ft_yolo_v2.pt` с карточкой `ft_yolo_v2.json`; обучение `python tracks/det/train.py --config tracks/det/configs/ft_yolo_v2.yaml` | sha256 в карточке `ft_yolo_v2.json`; стартовые веса `yolo11m.pt` релиза `v8.4.0` | AGPL-3.0 (производные от весов Ultralytics) | B |
-| Qwen3-VL-4B-Instruct | VLM-счётчик по широкому кропу стола, признаки строк `vlm_qwen__v1` (people, items) | Kaggle Models `qwen-lm/qwen-3-vl`, вариант `transformers/4b-instruct`, версия 1; исходные веса https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct | Kaggle Models версия 1; sha256 весов совпадает с ревизией Hugging Face `ebb281ec` (проверка в `experiments/LOG_det.md`); FP16, `do_sample=False` | Apache-2.0 | B, запись A |
+| модель | роль в решении | веса | ревизия | лицензия |
+|---|---|---|---|---|
+| Ultralytics YOLO11m (COCO) | стартовые веса своего детектора | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11m.pt | релиз v8.4.0, sha256 `d5ffc1a674953a08e11a8d21e022781b1b23a19b730afc309290bd9fb5305b95` | AGPL-3.0 |
+| `ft_yolo_v1`, YOLO11m, дообученный командой | руки в финале | Kaggle Dataset `victimestsate/ts-models`, файл `ft_yolo_v1.pt` | sha256 `5bf40b516688e9e448fcb7ab8c9de69d438eb39a85055e89f620a4ded50a3235` | AGPL-3.0, производная от весов Ultralytics |
+| Grounding DINO base | вещи в финале (вместе с OWLv2) | https://huggingface.co/IDEA-Research/grounding-dino-base | коммит `12bdfa3120f3e7ec7b434d90674b3396eccf88eb` | Apache-2.0 |
+| OWLv2 large patch14 ensemble | вещи и посуда в финале | https://huggingface.co/google/owlv2-large-patch14-ensemble | коммит `95e26936e865f87db1742128404b3c035d47d89d` | Apache-2.0 |
+| Qwen3-VL-4B-Instruct | вещи и руки в финале | Kaggle Models `qwen-lm/qwen-3-vl/Transformers/4b-instruct/1`, исходник https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct | по sha256 совпадает с коммитом `ebb281ec70b05090aa6165b016eac8ec08e71b17` | Apache-2.0 |
+| Ultralytics YOLO11x (COCO) | проверялся для людей и посуды, в финал не вошёл | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11x.pt | релиз v8.4.0, sha256 `7bc158aa95c0ebfdd87f70f01653c1131b93e92522dbe15c228bcd742e773a24` | AGPL-3.0 |
+| Ultralytics YOLO11x-pose | проверялся для рук, в финал не вошёл | https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11x-pose.pt | релиз v8.4.0, sha256 `013c43543b0751b8918486ba96e01ee44a59040683a07f96cc22bcc2cb7785f8` | AGPL-3.0 |
+| `ft_yolo_v2`, самообучение на предсказаниях v1 | проверялся для рук, в финал не вошёл | Kaggle Dataset `victimestsate/ts-models`, файл `ft_yolo_v2.pt` | sha256 `487695494bb436832882842c7b2c8f1fca431a60b5ab92772e3a7b7cd8ef5abb` | AGPL-3.0, производная от весов Ultralytics |
 
-## Где посчитаны кэши детекций и признаков
+Сборка финала на CPU использует ещё бейзлайн организаторов (`baseline.py` из пакета соревнования, ExtraTrees из scikit-learn) и их `score.py`, копия которого лежит в `ts/vendor/`.
 
-Финальный запуск (`run.py`, `notebooks/final_inference.ipynb`) читает детекции и признаки строк из кэша и сами модели не запускает. Каждый кэш получен ноутбуком Kaggle с зафиксированной версией:
+## Где посчитаны выходы моделей
 
-| кэш | модель | ноутбук и версия | датасет с кэшем |
+Финальная сборка читает выходы моделей из сохранённых файлов. Каждый файл получен ноутбуком Kaggle на Tesla T4 с выключенным интернетом.
+
+| файл | модели | ноутбук | где лежит |
 |---|---|---|---|
-| `dets/ov_gdino__v1`, `dets/ov_owl__v1`, `rowfeats/ov_counts__v1` | Grounding DINO base (Hugging Face, коммит `12bdfa3120f3e7ec7b434d90674b3396eccf88eb`), OWLv2 large patch14 ensemble (коммит `95e26936e865f87db1742128404b3c035d47d89d`) | https://www.kaggle.com/code/throddy/notebookc45eeb95e0?scriptVersionId=369282247 | `throddy/ts-artifacts-ov-pseudo` |
-| `dets/ft_yolo__v1` | ft_yolo_v1 | ноутбук `tracks/det/kaggle/det_train_ft_yolo.ipynb` на аккаунте трека B | `victimestsate/ts-artifacts-dets` |
-| `rowfeats/vlm_qwen__v1` | Qwen3-VL-4B-Instruct | шарды: https://www.kaggle.com/code/throddy/notebook15b164940c?scriptVersionId=369589586 и ноутбук трека B (`tracks/det/kaggle/det_vlm_all_a.ipynb`, `det_vlm_all_b.ipynb`) | `victimestsate/ts-artifacts-dets` |
+| `dets/ft_yolo__v1` | `ft_yolo_v1` | [tracks/det/kaggle/det_train_ft_yolo.ipynb](tracks/det/kaggle/det_train_ft_yolo.ipynb) | `victimestsate/ts-artifacts-dets` |
+| `dets/ov_gdino__v1`, `dets/ov_owl__v1`, `rowfeats/ov_counts__v1` | Grounding DINO, OWLv2 | https://www.kaggle.com/code/throddy/notebookc45eeb95e0?scriptVersionId=369282247 | `throddy/ts-artifacts-ov-pseudo` |
+| ответы VLM, шарды 0–1 | Qwen3-VL-4B | https://www.kaggle.com/code/throddy/ts-det-vlm-shards-0-1 | вывод ноутбука |
+| ответы VLM, шарды 2–3 | Qwen3-VL-4B | https://www.kaggle.com/code/throddy/notebook15b164940c?scriptVersionId=369589586 | вывод ноутбука |

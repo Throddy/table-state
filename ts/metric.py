@@ -1,4 +1,4 @@
-"""Метрика кейса: обёртка над копией score.py организаторов (раздел 7.8)."""
+"""Метрика кейса: обёртка над копией score.py организаторов."""
 from __future__ import annotations
 
 import numpy as np

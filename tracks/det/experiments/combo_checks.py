@@ -16,6 +16,8 @@ import sys
 import pandas as pd
 import yaml
 
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # модуль common лежит в tracks/det
 import common
 
 sys.path.insert(0, str(common.ROOT / 'tools'))

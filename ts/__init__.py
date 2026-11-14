@@ -1,6 +1,6 @@
 """Общая библиотека команды для кейса «Table State» (владелец: трек A).
 
-Сигнатуры зафиксированы в разделе 7 CONTRACT.md.
+Модули: paths, io, slots, rows, geometry, crops, assign, temporal, features, stack, post, metric, cv, check.
 """
 
 SEED = 419

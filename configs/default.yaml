@@ -1,7 +1,7 @@
 # Финальная сборка VLM_hands_avg (Public 0.75957), отмечена на Kaggle вместе с VLM_items (0.74357).
 # Колонки: people, cups, dishes, occ_prob как в COMBO; items = max(согласие Grounding DINO и OWLv2 за занятым столом, VLM);
 # hands = руки COMBO + половина шага вверх к VLM, затем правила по людям. Замороженная копия: configs/submissions/VLM_hands_avg.yaml.
-# Основной конфиг сборки. Меняет только роль A (раздел 5 контракта).
+# Параметры сборки.
 seed: 419
 
 # Источники детекций и признаков строк, участвующие в сборке.
@@ -14,7 +14,7 @@ sources:
 slots:
   edges: [0, 275, 450, 690, 925, 1140, 1300]
 
-# Зоны стола (раздел 9.1). Доли от ширины w и высоты h рамки стола.
+# Зоны стола. Доли от ширины w и высоты h рамки стола.
 zones:
   top:  {left: 0.08, right: 0.08, up: 0.08, down: 0.08}
   seat: {left: 0.45, right: 0.45, up: 1.10, down: 0.90}
@@ -29,7 +29,7 @@ crops:
 rows:
   ir_saturation_threshold: 0.05   # is_ir = 1, если средняя насыщенность HSV ниже порога
 
-# Откуда берётся каждая колонка итогового предсказания (раздел 12.5: колонка меняется только после
+# Откуда берётся каждая колонка итогового предсказания (колонка менялась только после
 # проверки заменой на Public). stack = своя сборка (ts.stack), baseline = бейзлайн организаторов
 # (data/baseline.py, режим calibrated, подгоняется на тех же строках).
 # Сборка COMBO: NB1 (Public 0.64519) + руки ft_yolo (AB_ft_hands_pp 0.65585) + вещи при согласии двух моделей
@@ -42,7 +42,7 @@ compose:
   items: stack         # вещи, найденные обеими моделями трека C, только при people >= 1: +0.019 на Public
   occ_prob: baseline   # AP на Public одинаков (AB_occ), остаётся вариант бейзлайна
 
-# Привязка объектов к столам (раздел 9, ts.assign).
+# Привязка объектов к столам (ts.assign).
 assign:
   small:
     hand_max_above: 0.05       # центр кисти не выше y1 - 0.05h
@@ -56,7 +56,7 @@ assign:
     rescue_min: 0.25           # добор сидящих за дальней стороной: доля нижней трети бокса в зоне top
     rescue_pick: horizontal    # при нескольких кандидатах: ближайшая по горизонтали рамка (share = большая доля, как в NB1)
 
-# Фильтры и контекст (раздел 10, ts.temporal).
+# Фильтры и контекст ±30 с (ts.temporal).
 temporal:
   min_conf: {}                 # {counter: порог} или {source: {counter: порог}}
   people_max_area: null        # фильтр площади бокса person выключен: на Public он вреден (R1b 0.580 против R1c 0.600)
@@ -68,10 +68,10 @@ temporal:
   # поднос уже считается с множителем post.tray_mult
   bowl_overlap_iou: 0.3
 
-# Стекер (раздел 11, ts.stack).
+# Стекер (ts.stack).
 stack:
   source: all                  # объединённый список объектов всех источников из sources.dets
-  # cur = текущий кадр, med = правило раздела 10. Для cups med на train хуже на 1 строку, поэтому пока cur.
+  # cur = текущий кадр, med = медиана по кадрам ±30 с. Для cups med на train хуже на 1 строку, поэтому пока cur.
   counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: cur}
   items_need_people: true      # items только при people >= 1 или при вещах на обоих соседних кадрах
   people_fill: true            # people из соседей, если сейчас 0, у соседей одинаково и есть руки
@@ -83,7 +83,7 @@ stack:
     dishes: {column: ov_counts__dishes_owl, mode: max}
   occ_C: 1.0
 
-# Постобработка (раздел 11.3). Каждое правило включается отдельно после проверки по 12.3.
+# Постобработка (ts.post). Каждое правило включается флагом.
 post:
   hands_need_people: true      # people = 0 -> hands = 0
   hands_cap: true              # hands <= 2 · people

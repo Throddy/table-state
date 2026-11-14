@@ -2,7 +2,7 @@
 
 Запуск:
   python tools/combo.py --base NB1 --take hands=AB_ft_hands_pp items=OV_items_and_pp dishes=OV_dishes_owl_max \
-      --config configs/COMBO.yaml --name COMBO
+      --config configs/submissions/COMBO.yaml --name COMBO
 
 1. Берёт ART/preds/<base>.csv и подставляет колонки из указанных файлов ART/preds/<файл>.csv.
 2. Проверяет, что каждая подставленная колонка совпадает со своим источником, а остальные с базой.

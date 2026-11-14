@@ -1,4 +1,4 @@
-"""Сборка признаков строк из источников (раздел 7.7)."""
+"""Сборка признаков строк из источников."""
 from __future__ import annotations
 
 from functools import lru_cache

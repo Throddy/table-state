@@ -1,4 +1,4 @@
-"""Контекст ±30 секунд (разделы 7.7 и 10)."""
+"""Контекст ±30 секунд."""
 from __future__ import annotations
 
 import numpy as np
@@ -128,7 +128,7 @@ def merge_sources(parts: list[pd.DataFrame], cfg: dict | None, name: str = 'all'
 
 
 def context_median(cur: np.ndarray, prev: np.ndarray, nxt: np.ndarray) -> np.ndarray:
-    """Правило раздела 10 для статичных классов.
+    """Правило для статичных классов (чашки, посуда, вещи).
 
     Три кадра: медиана. Один сосед: максимум из двух, только если оба больше
     нуля, иначе текущий. Без соседей: текущий. Отсутствующий сосед это NaN.

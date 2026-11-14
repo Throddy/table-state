@@ -1,4 +1,4 @@
-"""Стекер: правила счётчиков и модель `occ_prob` (раздел 11)."""
+"""Стекер: правила счётчиков и модель `occ_prob`."""
 from __future__ import annotations
 
 import json
@@ -12,14 +12,14 @@ from .temporal import aggregate, merge_sources
 
 DEFAULTS = {
     'source': 'all',       # объединённый список объектов всех источников детекций (ts.temporal.merge_sources)
-    # какой столбец агрегата идёт в счётчик: cur (текущий кадр) или med (правило раздела 10)
+    # какой столбец агрегата идёт в счётчик: cur (текущий кадр) или med (медиана по кадрам ±30 с)
     'counts': {'people': 'cur', 'hands': 'cur', 'cups': 'cur', 'dishes': 'cur', 'items': None},
     # items только при people >= 1 или если вещи есть на обоих соседних кадрах (оставленная вещь)
     'items_need_people': False,
-    'people_fill': True,   # правило раздела 10 для people: 0 сейчас, одинаково у соседей, есть руки
+    'people_fill': True,   # правило для people: 0 сейчас, одинаково у соседей, есть руки
     # голосование с признаками строк (11.1): {counter: {column: '<source>__<имя>', mode: median | replace | max}}
     'vote': {},
-    'tune_people_area': False,   # фильтр площади бокса person на Public вреден (контракт 1.7), включается только явно
+    'tune_people_area': False,   # фильтр площади бокса person на Public вреден (R1b 0.580 против R1c 0.600), включается только явно
     'tune_conf': True,     # подбирать пороги confidence для источников, кроме prod
     'conf_grid': [round(0.05 * i, 2) for i in range(1, 19)],
     'occ_C': 1.0,
@@ -35,7 +35,7 @@ def _cfg(cfg: dict | None) -> dict:
 
 
 def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
-    """Счётчики по правилам 11.1 и раздела 10 (без подгонки), индекс `row_id`."""
+    """Счётчики по правилам конфига (без подгонки), индекс `row_id`."""
     p = _cfg(cfg)
     src = p['source']
     out = pd.DataFrame(index=features.index)

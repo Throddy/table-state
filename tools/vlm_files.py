@@ -2,7 +2,7 @@
 
 Запуск: python tools/vlm_files.py [--rowfeats vlm_qwen__v1] [--base COMBO] [--only VLM_people VLM_items]
 Нужен ART/rowfeats/<rowfeats>.parquet с карточкой (вывод tracks/det/vlm/run_vlm.py --merge).
-Конфиги configs/VLM_people.yaml, VLM_items.yaml, VLM_both.yaml: это COMBO плюс блок overrides.
+Конфиги configs/submissions/VLM_people.yaml, VLM_items.yaml, VLM_both.yaml: это COMBO плюс блок overrides.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def main() -> None:
     report = {args.base: evaluate(base.reset_index()[PRED_COLUMNS], bootstrap=0)}
     for name in args.only:
         columns, note = FILES[name]
-        cfg = yaml.safe_load((ROOT / 'configs' / f'{name}.yaml').read_text(encoding='utf-8'))
+        cfg = yaml.safe_load((ROOT / 'configs' / 'submissions' / f'{name}.yaml').read_text(encoding='utf-8'))
         cfg['sources']['rowfeats'] = [args.rowfeats if r.startswith(source + '__v') else r for r in cfg['sources']['rowfeats']]
         out = build(name, cfg, notes=note, command='python tools/vlm_files.py ' + ' '.join(sys.argv[1:]))
         effective = out.with_suffix('.config.yaml')      # конфиг, по которому файл реально собран, его и замораживает gate

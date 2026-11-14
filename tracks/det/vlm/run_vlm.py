@@ -1,10 +1,10 @@
-"""VLM-счётчик по кропу строки (задача C3): Qwen-VL считает people, hands, cups, dishes, items для целевого стола.
+"""VLM-счётчик по кропу строки: Qwen-VL считает people, hands, cups, dishes, items для целевого стола.
 
 Запуск (одна ячейка Kaggle на шард, по процессу на GPU):
   python tracks/det/vlm/run_vlm.py --model <каталог весов> --subset all --shard 0 --of 2 --device cuda:0
   python tracks/det/vlm/run_vlm.py --model <каталог весов> --subset all --shard 1 --of 2 --device cuda:1
   python tracks/det/vlm/run_vlm.py --subset all --of 2 --merge          # сборка rowfeats после всех шардов
-Отладка и шаг 1 задачи C3: --subset train (231 строка, файл с суффиксом __train, без ts.check).
+Отладка и проверка на train: --subset train (231 строка, файл с суффиксом __train, без ts.check).
 
 Вход модели: широкий кроп строки (ts.crops, kind='wide', ×2.5) с тонкой красной рамкой целевого стола,
 длинная сторона приведена к 1024. Промпт: tracks/det/vlm/prompts/<--prompt-id>.txt. Генерация без сэмплирования,

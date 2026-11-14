@@ -10,6 +10,9 @@ from __future__ import annotations
 import pandas as pd
 from PIL import ImageDraw, ImageFont
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # модуль common лежит в tracks/det
 import common
 
 from ts import io, paths

@@ -1,4 +1,4 @@
-"""Пути к данным и артефактам. Только через TS_DATA и TS_ARTIFACTS (раздел 6)."""
+"""Пути к данным и артефактам. Только через TS_DATA и TS_ARTIFACTS."""
 from __future__ import annotations
 
 import os
