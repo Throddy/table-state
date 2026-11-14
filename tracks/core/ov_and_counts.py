@@ -6,12 +6,19 @@
 Пара порогов подбирается по train: минимум суммы |ошибки| для max(чашки прод-детектора, согласованные чашки),
 при равенстве более строгая пара. Тестовые строки: пороги со всего train; train-строки: пороги другого дня.
 Выход: ART/rowfeats/ovand__v1.parquet (`ovand__cups`, `ovand__ok`) и карточка.
+
+Ограничение: значения train-строк получены с порогами другого дня (out-of-fold, раздел 8.5). Колонку можно
+использовать только фиксированным правилом (как `compose: baseline_max`). Обучать на ней модель внутри фолда
+нельзя: значения строк дня подгонки зависят от счётчиков дня проверки.
 """
 from __future__ import annotations
 
 import itertools
 import json
+import os
+import shutil
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -89,7 +96,11 @@ def main() -> None:
         out.loc[ids] = count(pairs, thr, pd.Index(ids)).to_numpy()
         report[fold] = {'fit_date': fit_date, 'thr_gdino_owl': thr, 'abs_error_fit': err}
     frame = pd.DataFrame({'row_id': out.index, 'dt': 0, 'ovand__cups': out.to_numpy(), 'ovand__ok': 1})
-    path = paths.art('rowfeats', f'{NAME}.parquet')
+    # Файл и карточка сначала пишутся во временный каталог и проверяются: непроверенный артефакт
+    # не должен появиться в ART/rowfeats, где его подхватит сборка.
+    final = paths.art('rowfeats', f'{NAME}.parquet')
+    staging = Path(tempfile.mkdtemp(prefix='ovand_', dir=paths.ART))
+    path = staging / final.name
     frame.to_parquet(path, index=False)
     sha, _ = git_sha()
     cards = [json.loads((paths.ART / 'dets' / f'{s}.json').read_text(encoding='utf-8')) for s in SOURCES]
@@ -102,7 +113,13 @@ def main() -> None:
             'pairs': int(len(pairs)), 'thresholds': report,
             'notes': 'чашки, найденные обеими моделями трека C (dt = 0); пороги по счётчикам train'}
     path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    check_rowfeats(path)
+    try:
+        check_rowfeats(path)
+        os.replace(path, final)
+        os.replace(path.with_suffix('.json'), final.with_suffix('.json'))
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    path = final
     print(json.dumps(report, ensure_ascii=False))
     print(f'{NAME}: пар {len(pairs)}, чашек в тесте {int(out.loc[test_ids].sum())} в {int((out.loc[test_ids] > 0).sum())} строках -> {path}')
 
