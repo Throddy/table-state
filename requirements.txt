@@ -1,9 +1,14 @@
-# Ядро (CPU). Python 3.12. Версии как в data/requirements.txt организаторов.
-numpy>=1.26,<3
-pandas>=2.2,<4
-scikit-learn>=1.5,<2
-Pillow>=10,<14
-pyarrow>=15
-pyyaml>=6
-matplotlib>=3.8
-pytest>=8
+# Сборка финала на CPU, Python 3.12. Версии те, на которых собраны отмеченные сабмиты.
+numpy==2.5.4
+pandas==3.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+joblib==1.6.0
+pillow==13.0.0
+pyarrow==26.0.1
+pyyaml==6.0.3
+# скачивание данных и кэшей с Kaggle (tools/fetch_artifacts.py)
+kaggle==2.2.4
+# тесты и гистограмма площадей боксов (tools/person_area_hist.py)
+pytest==9.2.0
+matplotlib==3.11.2
