@@ -6,7 +6,8 @@
 - выставляет TS_DATA, TS_ARTIFACTS (/kaggle/working/artifacts) и TS_OV_MODELS, их наследуют команды `!python ...`;
 - проверяет Python, torch, CUDA, GPU, transformers и scipy;
 - восстанавливает готовые файлы и незавершённые порции прошлых запусков из подключённых датасетов;
-- берёт веса из подключённого датасета, а если их нет, скачивает `fetch_weights.py` (нужен интернет).
+- берёт веса из подключённого датасета (например, `ts-models-ov`), а если их нет, скачивает `fetch_weights.py`
+  (нужен интернет). `OV_SOURCES=ov_owl` в окружении: нужны веса только этой модели (по умолчанию обеих).
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 INPUT = Path(os.environ.get('TS_KAGGLE_INPUT', '/kaggle/input'))
 WORKING = Path(os.environ.get('TS_KAGGLE_WORKING', '/kaggle/working'))
-SOURCES = ['ov_gdino', 'ov_owl']
+SOURCES = [s for s in os.environ.get('OV_SOURCES', 'ov_gdino,ov_owl').split(',') if s]
 RESTORE = ['rows_ext.parquet', 'dets/ov_*__v*.parquet', 'dets/ov_*__v*.json', 'dets/ov_*__v*.parts',
            'labels/ov_pseudo__v*.parquet', 'labels/ov_pseudo__v*.json',
            'rowfeats/ov_counts__v*.parquet', 'rowfeats/ov_counts__v*.json']
@@ -75,9 +76,9 @@ def weights(art: Path) -> Path:
     for folder in [art / 'models'] + attached:
         if all((folder / source / 'model.safetensors').is_file() for source in SOURCES):
             return folder
-    print('весов нет ни в artifacts/models, ни в подключённых датасетах: скачиваю (нужен интернет)')
+    print(f'весов {SOURCES} нет ни в artifacts/models, ни в подключённых датасетах: скачиваю (нужен интернет)')
     env = {**os.environ, 'TS_OV_MODELS': str(art / 'models')}
-    if subprocess.run([sys.executable, str(ROOT / 'tracks' / 'ov' / 'fetch_weights.py')], env=env).returncode:
+    if subprocess.run([sys.executable, str(ROOT / 'tracks' / 'ov' / 'fetch_weights.py'), *SOURCES], env=env).returncode:
         raise RuntimeError('Веса не скачались: включите Internet в настройках ноутбука или подключите датасет с весами')
     return art / 'models'
 
