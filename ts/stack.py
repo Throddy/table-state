@@ -271,11 +271,17 @@ def make_fit_predict(cfg: dict, log: list | None = None):
             if not rule:
                 continue
             rows_ = features.loc[pred['row_id']]
-            value = rows_[rule['column']].to_numpy(float)
+            mode = rule.get('mode', 'replace')
+            if mode not in ('replace', 'max'):
+                raise ValueError(f'overrides.{column}: режим {mode!r}, допустимы replace и max')
             ok_column = rule['column'].split('__')[0] + '__ok'
-            ok = (value >= 0) & (rows_[ok_column].to_numpy(float) == 1 if ok_column in rows_ else True)
+            if ok_column not in rows_:
+                raise ValueError(f'overrides.{column}: нет колонки {ok_column}, без неё ответы источника не проверить')
+            raw_value = rows_[rule['column']].to_numpy(float)
+            ok = np.isfinite(raw_value) & (raw_value >= 0) & (rows_[ok_column].to_numpy(float) == 1)
+            value = np.clip(np.nan_to_num(raw_value), 0, 50)
             current = pred[column].to_numpy(float)
-            new = {'replace': value, 'max': np.maximum(current, value)}[rule.get('mode', 'replace')]
+            new = value if mode == 'replace' else np.maximum(current, value)
             pred[column] = np.where(ok, new, current)
         return pred
 

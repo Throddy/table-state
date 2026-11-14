@@ -50,6 +50,8 @@ def main() -> None:
         cfg = yaml.safe_load((ROOT / 'configs' / f'{name}.yaml').read_text(encoding='utf-8'))
         cfg['sources']['rowfeats'] = [args.rowfeats if r.startswith(source + '__v') else r for r in cfg['sources']['rowfeats']]
         out = build(name, cfg, notes=note, command='python tools/vlm_files.py ' + ' '.join(sys.argv[1:]))
+        effective = out.with_suffix('.config.yaml')      # конфиг, по которому файл реально собран, его и замораживает gate
+        effective.write_text(yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False), encoding='utf-8')
         new = io.read_csv_exact(out).set_index('row_id').loc[base.index]
         report[name] = evaluate(new.reset_index()[PRED_COLUMNS], bootstrap=0)
         print(f'\n{name}: {note}')
@@ -65,10 +67,12 @@ def main() -> None:
         print('  остальные колонки совпадают с основой (hands и items посчитаны по people основы)')
         if not args.no_gate:
             done = subprocess.run([sys.executable, str(ROOT / 'tools' / 'submit_gate.py'), '--pred', str(out),
-                                   '--config', str(ROOT / 'configs' / f'{name}.yaml'), '--note', note, '--brief'],
+                                   '--config', str(effective), '--note', note, '--brief'],
                                   capture_output=True, text=True)
-            print('  ' + '\n  '.join(line for line in done.stdout.splitlines() if 'GATE' in line or 'kaggle competitions' in line)
-                  if done.returncode == 0 else f'  gate не прошёл: {done.stdout[-400:]} {done.stderr[-400:]}')
+            if done.returncode != 0:
+                out.unlink(missing_ok=True)
+                raise SystemExit(f'{name}: gate не прошёл, файл удалён: {done.stdout[-400:]} {done.stderr[-400:]}')
+            print('  ' + '\n  '.join(line for line in done.stdout.splitlines() if 'GATE' in line or 'kaggle competitions' in line))
     print(f"\n{'файл':<12}{'oof_all':>8}{'f25':>8}{'f26':>8}{'robust':>8}{'people':>8}{'items':>8}   ошибка people / items")
     for name, r in report.items():
         a = r['oof_all']
