@@ -50,6 +50,8 @@ def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
     if tray_mult != 1.0 and p['counts'].get('dishes') and tray_column in features:
         out['dishes'] = out['dishes'] + (tray_mult - 1.0) * features[tray_column].to_numpy(float)
     for counter, rule in (p['vote'] or {}).items():
+        if not rule:      # правило выключено (vote.<counter>: null)
+            continue
         column, mode = rule['column'], rule.get('mode', 'median')
         value = features[column].to_numpy(float)
         ok_column = column.split('__')[0] + '__ok'

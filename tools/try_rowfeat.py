@@ -42,16 +42,17 @@ def main() -> None:
     check_rowfeats(paths.ART / 'rowfeats' / f'{args.rowfeats}.parquet')
     print(f'ts.check: {args.rowfeats} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
-    cfg['sources']['dets'] = ['prod']
-    cfg['sources'].pop('counters', None)
-    cfg['sources']['rowfeats'] = [args.rowfeats]
+    # Конфиг основы сохраняется целиком, меняется только правило для одной колонки.
+    if args.rowfeats not in cfg['sources'].get('rowfeats', []):
+        cfg['sources']['rowfeats'] = list(cfg['sources'].get('rowfeats', [])) + [args.rowfeats]
     cfg['stack']['counts'][args.col] = cfg['stack']['counts'].get(args.col) or 'cur'
-    cfg['stack']['vote'] = {args.col: {'column': args.column, 'mode': args.mode}}
-    cfg['stack']['items_need_people'] = bool(args.need_people)
-    cfg['compose'] = {**(cfg.get('compose') or {}), args.col: 'stack', 'hands': 'baseline'}
-    cfg['post'].update({'hands_need_people': False, 'hands_cap': False})
-    if args.col == 'dishes' and args.mode == 'replace':
-        cfg['post']['tray_mult'] = 1.0      # колонка rowfeats уже содержит свой счёт посуды; при max и median сравнивается с 2 × подносы
+    cfg['stack']['vote'] = {**(cfg['stack'].get('vote') or {}), args.col: {'column': args.column, 'mode': args.mode}}
+    if args.col == 'items':
+        cfg['stack']['items_need_people'] = bool(args.need_people)
+    cfg['compose'] = {**(cfg.get('compose') or {}), args.col: 'stack'}
+    if args.col == 'dishes':
+        # при replace колонка rowfeats уже содержит свой счёт посуды; при max и median сравнивается с 2 × подносы
+        cfg['post']['tray_mult'] = 1.0 if args.mode == 'replace' else cfg['post'].get('tray_mult', 2.0)
     full = f'{args.name}__src'
     build(full, cfg, notes=f'сборка для проверки колонки {args.column} из {args.rowfeats} как {args.col} ({args.mode})',
           command='python tools/try_rowfeat.py ' + ' '.join(sys.argv[1:]))

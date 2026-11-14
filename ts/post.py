@@ -30,7 +30,7 @@ def _cfg(cfg: dict | None) -> dict:
 def has_items_source(cfg: dict | None) -> bool:
     """Есть ли в сборке источник вещей (детекции или голосование по признакам строк)."""
     stack = (cfg or {}).get('stack', {})
-    return bool(stack.get('counts', {}).get('items')) or 'items' in (stack.get('vote') or {})
+    return bool(stack.get('counts', {}).get('items')) or bool((stack.get('vote') or {}).get('items'))
 
 
 def apply(pred: pd.DataFrame, cfg: dict) -> pd.DataFrame:

@@ -120,11 +120,17 @@ def main() -> None:
         check_dets(paths.ART / 'dets' / f'{source}.parquet')
         print(f'ts.check: {source} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
-    cfg['sources']['dets'] = list(args.source) if args.alone else ['prod'] + list(args.source)
+    # Источники основы (например ft_yolo для рук) и их ограничения сохраняются, новые добавляются к ним.
+    kept = [s for s in cfg['sources'].get('dets', ['prod']) if s not in args.source]
+    cfg['sources']['dets'] = list(args.source) if args.alone else kept + list(args.source)
     if not args.all_counters and not args.alone:
-        cfg['sources']['counters'] = {source: [c for c in args.cols if c in COUNTS] for source in args.source}
+        cfg['sources']['counters'] = {**(cfg['sources'].get('counters') or {}),
+                                      **{source: [c for c in args.cols if c in COUNTS] for source in args.source}}
     if args.classes:
-        cfg['sources']['classes'] = {source: list(args.classes) for source in args.source}
+        cfg['sources']['classes'] = {**(cfg['sources'].get('classes') or {}), **{source: list(args.classes) for source in args.source}}
+    for column in args.cols:      # колонка считается по детекциям, прежнее голосование с rowfeats для неё выключается
+        if (cfg['stack'].get('vote') or {}).get(column):
+            cfg['stack']['vote'][column] = None
     for item in args.set:
         node, keys = cfg, item.split('=', 1)[0].split('.')
         for key in keys[:-1]:
