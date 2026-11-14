@@ -49,14 +49,18 @@ def source_parts(sources: list[str], cfg: dict | None = None) -> list[pd.DataFra
 
     `sources.counters: {<source>: [hands, cups]}` оставляет от источника только объекты перечисленных
     счётчиков: так новый источник меняет ровно одну колонку, а остальные считаются по прежним.
+    `sources.classes: {<source>: [plate, bowl]}` оставляет только перечисленные классы словаря 8.2.
     """
     dets, _ = split_sources(sources)
     limits = ((cfg or {}).get('sources') or {}).get('counters') or {}
+    classes = ((cfg or {}).get('sources') or {}).get('classes') or {}
     parts = []
     for source in dets:
         part = assigned_for(source, cfg)
         if source in limits:
             part = part[part['counter'].isin(limits[source])]
+        if source in classes:
+            part = part[part['class_name'].isin(classes[source])]
         parts.append(part)
     return parts
 

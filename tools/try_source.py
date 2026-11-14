@@ -53,6 +53,19 @@ def report_test_changes(base: str, donor: str, cols: list[str]) -> None:
           + ('  <-- МЕНЬШЕ 100: сабмит почти не отличается от базы' if total < 100 else ''))
 
 
+def report_items(base: str, donor: str) -> None:
+    """Вещи на столах без людей (people основы = 0): сколько строк и вещей в тесте."""
+    tables = io.load_tables().set_index('row_id')
+    test_ids = tables.index[tables['split'] == 'test']
+    a = io.read_csv_exact(pred_path(base)).set_index('row_id').loc[test_ids]
+    b = io.read_csv_exact(pred_path(donor)).set_index('row_id').loc[test_ids]
+    empty = a['people'] < 1
+    print('Вещи в тесте по занятости стола (people основы):')
+    for label, m in [('people = 0', empty), ('people >= 1', ~empty)]:
+        print(f"  {label}: строк {int(m.sum())}; с вещами было {int((a.loc[m, 'items'] >= 0.5).sum())} (сумма {a.loc[m, 'items'].sum():.1f}), "
+              f"стало {int((b.loc[m, 'items'] >= 0.5).sum())} (сумма {b.loc[m, 'items'].sum():.1f})")
+
+
 def report_dishes(base: str, donor: str, cfg: dict) -> None:
     """Посуда: сколько тарелок и мисок отброшено как уже посчитанные и сколько строк меняется без подноса."""
     from ts.features import build_features, source_parts
@@ -87,7 +100,8 @@ def report_dishes(base: str, donor: str, cfg: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--source', required=True, help='имя файла ART/dets/<source>__v<N> без расширения')
+    parser.add_argument('--source', required=True, nargs='+', help='имена файлов ART/dets/<source>__v<N> без расширения (один или несколько)')
+    parser.add_argument('--classes', nargs='+', help='взять от новых источников только эти классы словаря 8.2')
     parser.add_argument('--cols', nargs='+', required=True, help='колонки, которые берём из сборки с источником')
     parser.add_argument('--base', required=True, help='базовое предсказание ART/preds/<base>.csv')
     parser.add_argument('--name', required=True, help='имя итогового сабмита')
@@ -102,12 +116,15 @@ def main() -> None:
     parser.add_argument('--no-gate', action='store_true')
     args = parser.parse_args()
 
-    check_dets(paths.ART / 'dets' / f'{args.source}.parquet')
-    print(f'ts.check: {args.source} OK')
+    for source in args.source:
+        check_dets(paths.ART / 'dets' / f'{source}.parquet')
+        print(f'ts.check: {source} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
-    cfg['sources']['dets'] = [args.source] if args.alone else ['prod', args.source]
+    cfg['sources']['dets'] = list(args.source) if args.alone else ['prod'] + list(args.source)
     if not args.all_counters and not args.alone:
-        cfg['sources']['counters'] = {args.source: [c for c in args.cols if c in COUNTS]}
+        cfg['sources']['counters'] = {source: [c for c in args.cols if c in COUNTS] for source in args.source}
+    if args.classes:
+        cfg['sources']['classes'] = {source: list(args.classes) for source in args.source}
     for item in args.set:
         node, keys = cfg, item.split('=', 1)[0].split('.')
         for key in keys[:-1]:
@@ -118,7 +135,7 @@ def main() -> None:
         if counter in COUNTS and not cfg['stack']['counts'].get(counter):
             cfg['stack']['counts'][counter] = 'cur'      # счётчик, который раньше был нулевым (items)
     full = f'{args.name}__src'
-    build(full, cfg, notes=f'сборка для проверки источника {args.source}, колонки {args.cols}',
+    build(full, cfg, notes=f'сборка для проверки источников {args.source}, колонки {args.cols}, классы {args.classes or "все"}',
           command='python tools/try_source.py ' + ' '.join(sys.argv[1:]))
 
     header = f"{'файл':<34}{'oof_all':>8}{'f25':>8}{'f26':>8}{'robust':>8}{'AP':>7}" + ''.join(f'{c:>8}' for c in COUNTS)
@@ -130,6 +147,8 @@ def main() -> None:
               f"{r['robust']['oof_all']['score']:>8.4f}{a['occupancy_ap']:>7.3f}"
               + ''.join(f"{a['quality'][c]:>8.3f}" for c in COUNTS))
     report_test_changes(args.base, full, args.cols)
+    if 'items' in args.cols:
+        report_items(args.base, full)
     if 'dishes' in args.cols:
         report_dishes(args.base, full, cfg)
     print()

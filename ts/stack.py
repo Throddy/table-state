@@ -14,6 +14,8 @@ DEFAULTS = {
     'source': 'all',       # объединённый список объектов всех источников детекций (ts.temporal.merge_sources)
     # какой столбец агрегата идёт в счётчик: cur (текущий кадр) или med (правило раздела 10)
     'counts': {'people': 'cur', 'hands': 'cur', 'cups': 'cur', 'dishes': 'cur', 'items': None},
+    # items только при people >= 1 или если вещи есть на обоих соседних кадрах (оставленная вещь)
+    'items_need_people': False,
     'people_fill': True,   # правило раздела 10 для people: 0 сейчас, одинаково у соседей, есть руки
     # голосование с признаками строк (11.1): {counter: {column: '<source>__<имя>', mode: median | replace | max}}
     'vote': {},
@@ -61,6 +63,10 @@ def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
         prev, nxt = features[f'{src}__people__prev'], features[f'{src}__people__next']
         fill = (out['people'] == 0) & (prev > 0) & (prev == nxt) & (features[f'{src}__hands__cur'] > 0)
         out.loc[fill, 'people'] = prev[fill]
+    if p['items_need_people'] and p['counts'].get('items'):
+        prev, nxt = features[f'{src}__items__prev'], features[f'{src}__items__next']
+        stays = (prev > 0) & (nxt > 0)     # NaN (соседа нет или источник посчитан только для dt = 0) даёт False
+        out.loc[(out['people'] < 1) & ~stays, 'items'] = 0.0
     return out
 
 

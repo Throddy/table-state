@@ -69,6 +69,7 @@ stack:
   source: all                  # объединённый список объектов всех источников из sources.dets
   # cur = текущий кадр, med = правило раздела 10. Для cups med на train хуже на 1 строку, поэтому пока cur.
   counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: null}
+  items_need_people: false     # items только при people >= 1 или при вещах на обоих соседних кадрах
   people_fill: true            # people из соседей, если сейчас 0, у соседей одинаково и есть руки
   tune_people_area: false      # порог площади не подбирается, см. temporal.people_max_area
   tune_conf: true              # пороги confidence источников, кроме prod: по одному на (источник, счётчик)
