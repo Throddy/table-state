@@ -23,7 +23,7 @@ import pandas as pd
 import yaml
 
 import common
-from common import FT_CLASSES, TRAIN_DATES
+from common import CLASS_SETS, OV_EXTRA, TRAIN_DATES
 import fetch_weights
 
 from ts import SEED, paths
@@ -87,8 +87,11 @@ def main() -> None:
 
     data_dir = args.data.resolve()
     data_card = json.loads((data_dir / 'card.json').read_text(encoding='utf-8'))
-    if data_card.get('manual_labels_used') or data_card['classes'] != FT_CLASSES:
-        raise SystemExit('Датасет не подходит: ручные метки или другой список классов.')
+    base = CLASS_SETS['v1']
+    classes = list(data_card['classes'])
+    allowed = base if cfg['classes'] == 'v1' else base + [c for c in OV_EXTRA if c in classes]
+    if data_card.get('manual_labels_used') or classes != allowed:
+        raise SystemExit(f"Датасет не подходит: ручные метки или классы {classes} вместо {allowed} (режим {cfg['classes']}).")
     if args.weights.name != cfg['base_weights']:
         raise SystemExit(f"Конфиг требует стартовые веса {cfg['base_weights']}, передан {args.weights.name}.")
     base_model = fetch_weights.model_ref(args.weights)      # сверяет sha256 с зафиксированным
@@ -102,7 +105,7 @@ def main() -> None:
     save_dir.mkdir(parents=True, exist_ok=True)
     data_yaml = save_dir / 'data.yaml'
     data_yaml.write_text(yaml.safe_dump({'path': str(data_dir), 'train': 'images/train', 'val': 'images/holdout',
-                                         'names': dict(enumerate(FT_CLASSES))}, allow_unicode=True), encoding='utf-8')
+                                         'names': dict(enumerate(classes))}, allow_unicode=True), encoding='utf-8')
     trainer = gray_trainer(float(cfg.get('gray_p', 0.0)), SEED)
     final = save_dir / f'{name}.pt'
     if final.exists():
@@ -136,7 +139,7 @@ def main() -> None:
                           'holdout_frames': data_card['holdout_frames'], 'pseudo_dates': data_card['pseudo_dates']},
         'manual_labels_used': False,
         'uses_train_counters': False,
-        'classes': FT_CLASSES,
+        'classes': classes,
         'config': cfg | {'train': train_args},
         'epochs_done': int(results['epoch'].max()),
         'last_epoch': {k: float(v) for k, v in results.iloc[-1].items()},

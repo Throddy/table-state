@@ -5,5 +5,4 @@
 # без сети (tracks/det/kaggle/README.md). Версии совпадают с WHEELS в tracks/det/fetch_weights.py.
 ultralytics==8.4.211          # YOLO11: COCO-источники, дообучение (B4), pose (B5)
 ultralytics-thop==2.2.5
-ultralytics-platform==0.1.110
 nvidia-ml-py==13.615.71

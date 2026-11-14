@@ -45,7 +45,7 @@ WEIGHTS: dict[str, dict] = {
     },
 }
 # Чистые python-колёса (py3-none-any). torch, torchvision, opencv и остальное берутся из образа Kaggle.
-WHEELS = ['ultralytics==8.4.211', 'ultralytics-thop==2.2.5', 'ultralytics-platform==0.1.110', 'nvidia-ml-py==13.615.71']
+WHEELS = ['ultralytics==8.4.211', 'ultralytics-thop==2.2.5', 'nvidia-ml-py==13.615.71']
 
 
 def sha256(path: Path) -> str:

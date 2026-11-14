@@ -4,6 +4,7 @@
   coco_person  YOLO11x (COCO), класс person на полном кадре, imgsz 1280, все 1718 кадров (часть B6)
   coco_crop    YOLO11x (COCO), кропы top ×4 всех строк rows_ext, классы COCO -> словарь 8.2 таблицей
   ft_yolo      свой детектор (B4): кропы top ×4 всех строк rows_ext и полный кадр для людей
+  pose         YOLO11x-pose (B5): широкие кропы wide ×2.5 всех строк rows_ext, запястья в зоне top как hand
 
 Запуск (одна ячейка Kaggle на источник, сеть не нужна):
   python tracks/det/infer.py --source coco_person --weights <ts-models>/yolo11x.pt
@@ -13,6 +14,10 @@
 Результат: ART/dets/<source>__v<N>.parquet и карточка, в конце ts.check.check_dets.
 Прогон возобновляемый: порции лежат в ART/dets/_parts/<source>__v<N>/, повторный запуск той же
 команды пропускает готовые порции. Отладка на train-днях: --subset train (карточка coverage=train_only).
+
+--tta: к обычному проходу добавляются горизонтальное отражение и второй масштаб (imgsz × 1.25), боксы трёх
+проходов объединяются NMS по классу (IoU 0.5). Источник получает имя <source>_tta, например ft_yolo_tta__v1.
+--from-cache: если артефакт уже лежит и проходит ts.check, скрипт ничего не считает (точка входа для run.py).
 """
 from __future__ import annotations
 
@@ -21,19 +26,22 @@ import json
 import math
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from PIL import ImageOps
 
 import common
-from common import CONF_MIN, FT_CLASSES, NMS_IOU, TRAIN_DATES, PartStore
+from common import CONF_MIN, NMS_IOU, TRAIN_DATES, PartStore
 import fetch_weights
 
 from ts import io, paths
+from ts.check import CLASS_TO_COUNTER, check_dets
 from ts.crops import crop_table, to_frame_coords
+from ts.geometry import zone
 from ts.rows import load_rows_ext
 
 # Классы COCO -> словарь 8.2. Счётные: cup, bowl, phone, bag, paper. Негативы: laptop, bottle, vase.
@@ -54,17 +62,23 @@ class Pass:
     name: str                   # имя каталога порций
     view: str                   # 'full' (кадр целиком) или зона стола для ts.crops.crop_table
     imgsz: int                  # длинная сторона входа модели
-    class_map: dict             # имя класса модели -> класс словаря 8.2
+    class_map: dict | None      # имя класса модели -> класс словаря 8.2; None = все классы весов, кроме person
     scale: float = 1.0          # увеличение кропа
+    pose: bool = False          # pose-модель: запястья выдаются как детекции hand
 
 
 PROFILES: dict[str, list[Pass]] = {
     'coco_person': [Pass('full', 'full', 1280, COCO_PERSON_MAP)],
     'coco_crop': [Pass('top', 'top', 1024, COCO_CROP_MAP, scale=4.0)],
-    'ft_yolo': [Pass('top', 'top', 1024, {c: c for c in FT_CLASSES if c != 'person'}, scale=4.0),
+    # классы своего детектора берутся из самих весов: на кропах всё, кроме person, на полном кадре только person
+    'ft_yolo': [Pass('top', 'top', 1024, None, scale=4.0),
                 Pass('full', 'full', 1280, {'person': 'person'})],
+    'pose': [Pass('wide', 'wide', 1024, {'person': 'hand'}, scale=2.5, pose=True)],
 }
-CHUNK = {'full': 128, 'top': 512}
+CHUNK = {'full': 128, 'top': 512, 'wide': 512}
+HAND_BOX = 28.0          # B5: бокс 28×28 px кадра вокруг запястья
+FOREARM_SHIFT = 0.3      # B5: сдвиг на 0.3 длины предплечья в сторону от локтя
+WRISTS = {9: 7, 10: 8}   # ключевые точки COCO: запястье -> локоть той же руки
 
 
 def units_of(view: str, subset: str) -> pd.DataFrame:
@@ -92,16 +106,48 @@ def load_unit(unit, p: Pass):
                       slot=int(unit.slot))
 
 
+TTA_SCALE = 1.25         # второй масштаб TTA относительно imgsz прохода
+
+
+def boxes_of(result) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Боксы (в пикселях поданной картинки), confidence и номера классов одного результата Ultralytics."""
+    return (result.boxes.xyxy.cpu().numpy().astype(float).reshape(-1, 4),
+            result.boxes.conf.cpu().numpy().astype(float), result.boxes.cls.cpu().numpy().astype(int))
+
+
+def predict_boxes(model, images: list, p: Pass, class_ids: list[int], args) -> list[tuple]:
+    """Предсказание для списка картинок. С `--tta` три прохода: обычный, отражённый и увеличенный.
+
+    Боксы отражённого прохода возвращаются в координаты исходной картинки. Объединение проходов
+    делает NMS по классу в `decode`.
+    """
+    def run(batch: list, imgsz: int) -> list:
+        return model.predict(batch, imgsz=imgsz, conf=CONF_MIN, iou=NMS_IOU, classes=class_ids, agnostic_nms=False,
+                             max_det=args.max_det, device=args.device, quantize=16 if args.half else 32, verbose=False)
+
+    out = [boxes_of(r) for r in run(images, p.imgsz)]
+    if not args.tta:
+        return out
+    flipped = [boxes_of(r) for r in run([ImageOps.mirror(image) for image in images], p.imgsz)]
+    larger = [boxes_of(r) for r in run(images, int(round(p.imgsz * TTA_SCALE / 32)) * 32)]
+    merged = []
+    for image, base, flip, big in zip(images, out, flipped, larger):
+        fb = flip[0].copy()
+        fb[:, [0, 2]] = image.width - flip[0][:, [2, 0]]
+        merged.append((np.concatenate([base[0], fb, big[0]]), np.concatenate([base[1], flip[1], big[1]]),
+                       np.concatenate([base[2], flip[2], big[2]])))
+    return merged
+
+
 def decode(result, unit, meta, p: Pass, names: dict) -> list[tuple]:
-    """Результат Ultralytics для одной картинки -> сырые детекции в координатах кадра.
+    """Боксы одной картинки (`boxes_of` или объединение проходов TTA) -> сырые детекции в координатах кадра.
 
     Координаты кропа переводятся через `to_frame_coords`, боксы обрезаются по кадру. После перевода
     классов в словарь 8.2 делается NMS по классу (IoU 0.5) внутри этой картинки: два класса COCO могут
     отображаться в один класс словаря. Между кропами дедупликации нет, её делает `ts.assign` (8.1).
     """
-    boxes = result.boxes.xyxy.cpu().numpy().astype(float).reshape(-1, 4)
-    conf = result.boxes.conf.cpu().numpy().astype(float).clip(0.0, 1.0)
-    cls = result.boxes.cls.cpu().numpy().astype(int)
+    boxes, conf, cls = result
+    conf = conf.clip(0.0, 1.0)
     if meta is not None:
         boxes = to_frame_coords(boxes, meta)
     boxes = common.clip_to_frame(boxes)
@@ -112,6 +158,40 @@ def decode(result, unit, meta, p: Pass, names: dict) -> list[tuple]:
     row_id = None if meta is None else unit.row_id
     dt = None if meta is None else int(unit.dt)
     return [(unit.frame_id, classes[i], float(conf[i]), *boxes[i].tolist(), row_id, dt) for i in keep]
+
+
+def decode_pose(result, unit, meta, p: Pass) -> list[tuple]:
+    """Запястья pose-модели на широком кропе -> детекции `hand` в координатах кадра (задача B5).
+
+    Бокс 28×28 px кадра вокруг запястья, сдвинутый на 0.3 длины предплечья в сторону от локтя.
+    Остаются только точки, попавшие в зону top стола строки. Confidence детекции это confidence
+    ключевой точки запястья. Локоть с confidence ниже порога записи сдвига не даёт.
+    """
+    if result.keypoints is None or result.keypoints.conf is None or not len(result.keypoints):
+        return []
+    xy = result.keypoints.xy.cpu().numpy().astype(float)        # (люди, 17, 2) в пикселях кропа
+    kc = result.keypoints.conf.cpu().numpy().astype(float)
+    top = zone((unit.x1, unit.y1, unit.x2, unit.y2), 'top', int(unit.slot))
+    boxes, conf = [], []
+    for person in range(len(xy)):
+        for wrist, elbow in WRISTS.items():
+            if kc[person, wrist] < CONF_MIN:
+                continue
+            w = to_frame_coords(np.concatenate([xy[person, wrist], xy[person, wrist]]), meta)[0, :2]
+            if kc[person, elbow] >= CONF_MIN:
+                e = to_frame_coords(np.concatenate([xy[person, elbow], xy[person, elbow]]), meta)[0, :2]
+                w = w + FOREARM_SHIFT * (w - e)
+            if not (top[0] <= w[0] <= top[2] and top[1] <= w[1] <= top[3]):
+                continue
+            boxes.append([w[0] - HAND_BOX / 2, w[1] - HAND_BOX / 2, w[0] + HAND_BOX / 2, w[1] + HAND_BOX / 2])
+            conf.append(min(1.0, float(kc[person, wrist])))
+    if not boxes:
+        return []
+    boxes, conf = common.clip_to_frame(np.array(boxes)), np.array(conf)
+    ok = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
+    boxes, conf = boxes[ok], conf[ok]
+    keep = common.nms_per_class(boxes, conf, np.array(['hand'] * len(boxes), dtype=object), NMS_IOU)
+    return [(unit.frame_id, 'hand', float(conf[i]), *boxes[i].tolist(), unit.row_id, int(unit.dt)) for i in keep]
 
 
 def run_pass(model, p: Pass, units: pd.DataFrame, store: PartStore, args) -> None:
@@ -135,11 +215,15 @@ def run_pass(model, p: Pass, units: pd.DataFrame, store: PartStore, args) -> Non
             for start in range(0, len(part_units), args.batch):
                 batch = list(part_units.iloc[start:start + args.batch].itertuples(index=False))
                 loaded = list(pool.map(lambda u: load_unit(u, p), batch))
-                results = model.predict([image for image, _ in loaded], imgsz=p.imgsz, conf=CONF_MIN, iou=NMS_IOU,
-                                        classes=class_ids, agnostic_nms=False, max_det=args.max_det,
-                                        device=args.device, quantize=16 if args.half else 32, verbose=False)
+                images = [image for image, _ in loaded]
+                if p.pose:
+                    results = model.predict(images, imgsz=p.imgsz, conf=CONF_MIN, iou=NMS_IOU, classes=class_ids,
+                                            max_det=args.max_det, device=args.device,
+                                            quantize=16 if args.half else 32, verbose=False)
+                else:
+                    results = predict_boxes(model, images, p, class_ids, args)
                 for unit, (_, meta), result in zip(batch, loaded, results):
-                    rows.extend(decode(result, unit, meta, p, names))
+                    rows.extend(decode_pose(result, unit, meta, p) if p.pose else decode(result, unit, meta, p, names))
             store.save(part, common.raw_table(rows), part_units['unit_id'].tolist())
             done_units += len(part_units)
             rate = (time.time() - started) / done_units
@@ -179,9 +263,19 @@ def main() -> None:
     parser.add_argument('--device', default=None, help="устройство Ultralytics: '0', 'cpu', 'mps'")
     parser.add_argument('--half', action='store_true', help='FP16 на GPU (быстрее, по умолчанию FP32)')
     parser.add_argument('--max-det', type=int, default=300)
+    parser.add_argument('--tta', action='store_true', help='отражение и второй масштаб, источник <source>_tta')
+    parser.add_argument('--from-cache', action='store_true', help='не пересчитывать, если артефакт есть и проходит ts.check')
     args = parser.parse_args()
 
     common.require_data()
+    if args.tta and any(p.pose for p in PROFILES[args.source]):
+        raise SystemExit('--tta для pose не поддерживается.')
+    source = args.source + ('_tta' if args.tta else '')
+    cached = paths.ART / 'dets' / f'{source}__v{args.version}.parquet'
+    if args.from_cache and cached.is_file():
+        check_dets(cached)
+        print(f'{cached.name}: взят из кэша, ts.check dets: OK')
+        return
     ultralytics_version = common.setup_ultralytics()
     common.seed_everything()
     import torch
@@ -190,7 +284,7 @@ def main() -> None:
     weights_sha = common.file_sha256(args.weights) if args.weights.is_file() else ''
     model = common.load_model(args.weights)
     models, inherited = model_refs(args.weights)
-    name = f'{args.source}__v{args.version}'
+    name = f'{source}__v{args.version}'
     if (paths.ART / 'dets' / f'{name}.parquet').exists():
         raise SystemExit(f'{name}.parquet уже существует. Артефакты неизменяемы: поднимите --version.')
     parts_root = paths.art('dets', '_parts') / (name if args.subset == 'all' else f'{name}__{args.subset}')
@@ -198,10 +292,16 @@ def main() -> None:
     started = time.time()
     raw, frames, rows_done, passes_info = [], set(), {}, []
     for p in PROFILES[args.source]:
+        if p.class_map is None:
+            own = {c: c for c in model.names.values() if c != 'person'}
+            unknown = sorted(set(own) - set(CLASS_TO_COUNTER))
+            if unknown:
+                raise SystemExit(f'Классы весов {unknown} не из словаря 8.2.')
+            p = replace(p, class_map=own)
         units = units_of(p.view, args.subset)
         chunk = args.chunk or CHUNK[p.name]
-        fingerprint = {'source': args.source, 'pass': p.name, 'view': p.view, 'scale': p.scale, 'imgsz': p.imgsz,
-                       'class_map': p.class_map, 'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half,
+        fingerprint = {'source': source, 'tta': args.tta, 'pass': p.name, 'view': p.view, 'scale': p.scale, 'imgsz': p.imgsz,
+                       'class_map': p.class_map, 'pose': p.pose, 'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half,
                        'max_det': args.max_det, 'weights_sha256': weights_sha, 'ultralytics': ultralytics_version,
                        'chunk': chunk, 'units': {'n': len(units), 'sha1': common.sha1_ids(units['unit_id'])}}
         store = PartStore(parts_root / p.name, fingerprint)
@@ -218,7 +318,7 @@ def main() -> None:
     elapsed = time.time() - started
 
     raw = [t for t in raw if len(t)]
-    dets = common.finalize_dets(pd.concat(raw, ignore_index=True) if raw else pd.DataFrame(), args.source)
+    dets = common.finalize_dets(pd.concat(raw, ignore_index=True) if raw else pd.DataFrame(), source)
     by_class = {k: int(v) for k, v in dets['class_name'].value_counts().sort_index().items()}
     views = ', '.join(f"{i['view']} imgsz {i['imgsz']}" + (f" ×{i['scale']:g}" if i['view'] != 'full' else '')
                       for i in passes_info)
@@ -233,21 +333,21 @@ def main() -> None:
         rows_processed=rows_done or None,
         passes=passes_info,
         detections={'n': len(dets), 'frames_with_detections': int(dets['frame_id'].nunique()), 'by_class': by_class},
-        params={'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half, 'batch': args.batch, 'max_det': args.max_det,
+        params={'conf': CONF_MIN, 'iou': NMS_IOU, 'half': args.half, 'tta': ({'hflip': True, 'scales': [1.0, TTA_SCALE], 'merge': 'NMS по классу'} if args.tta else None), 'batch': args.batch, 'max_det': args.max_det,
                 'seed': common.SEED},
         runtime={'device': common.device_name(args.device), 'seconds': round(elapsed, 1),
                  'ultralytics': ultralytics_version, 'torch': torch.__version__},
         kaggle_dataset_version=None,
         **inherited,
     )
-    path = common.write_dets_artifact(dets, args.source, args.version, card)
+    path = common.write_dets_artifact(dets, source, args.version, card)
 
     print(f'\n{name}: {len(dets)} детекций на {dets["frame_id"].nunique()} кадрах из {len(frames)} обработанных')
     print('классы: ' + ', '.join(f'{k} {v}' for k, v in by_class.items()))
     print(f'файл: {path}\nкарточка: {path.with_suffix(".json")}\nts.check dets: OK')
     print(f'время этого запуска: {elapsed / 60:.1f} мин на {common.device_name(args.device)} (для учёта квоты GPU)')
     print('\nСтрока для experiments/LOG.md (метрики пустые, пока источник не оценён через ts.cv):')
-    print(f'| {log_time()} | B | {name} | {args.source}: {views} | | | | | | | | | | '
+    print(f'| {log_time()} | B | {name} | {source}: {views} | | | | | | | | | | '
           f'{len(dets)} детекций ({", ".join(f"{k} {v}" for k, v in by_class.items())}); '
           f'`{common.command_line()}`; `python -m ts.check dets {path.name}`: OK |')
 

@@ -1,12 +1,13 @@
 # Обучение своего детектора v1 (задача B4). Запуск: python tracks/det/train.py --config tracks/det/configs/ft_yolo_v1.yaml ...
 name: ft_yolo_v1
+classes: v1                   # person, hand, cup, tray (tracks/det/common.py, CLASS_SETS)
 base_weights: yolo11m.pt      # COCO-веса из датасета ts-models, файл закреплён в tracks/det/fetch_weights.py
 gray_p: 0.3                   # перевод батча в серый под ИК-кадры: указание роли A (в train 12 из 39 кадров ИК)
 
 # Аргументы Ultralytics. Всё, чего здесь нет, остаётся по умолчанию библиотеки.
 train:
   imgsz: 1024                 # B4: 960–1280 на кропах
-  epochs: 30
+  epochs: 25                  # бюджет 3 ч на одной T4; потолок времени задаётся --hours
   batch: 8
   seed: 419
   deterministic: true
