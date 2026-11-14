@@ -72,6 +72,12 @@ python tools/try_source.py --source coco_person__v1 --cols people --base <луч
 # колонка из признаков строк (rowfeats) вместо счётчика: проверка -> сборка -> замена в базовом файле -> gate
 python tools/try_rowfeat.py --rowfeats ov_counts__v1 --column ov_counts__items_gdino_and_owl --col items --base NB1 --name OV_items_and
 
+# разбор ошибки на train по колонкам: недосчёт и пересчёт, ИК и цвет, столы с людьми и без
+python tools/error_breakdown.py COMBO
+
+# демо очереди оператора -> report/demo_queue.jpg, report/demo_queue.csv
+python tracks/core/demo_queue.py
+
 # три журнала одной таблицей
 python tools/log_all.py --tail 30
 
