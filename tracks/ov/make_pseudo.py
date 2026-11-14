@@ -2,7 +2,7 @@
 
 Запуск:
   python tracks/ov/make_pseudo.py ov_gdino__v1 ov_owl__v1               # -> ART/labels/ov_pseudo__v1.parquet
-  python tracks/ov/make_pseudo.py ov_gdino__v0 ov_owl__v0 --version 0   # отладка на train-днях
+  python tracks/ov/make_pseudo.py ov_gdino__v0 ov_owl__v0 --version 0 --dates 2026-10-25 2026-10-26   # отладка
 
 Кандидат: обе модели нашли на кадре объект одного класса (правило совпадения 9.2.6). Счётные детекции,
 перекрытые более уверенным негативом своего источника, не участвуют. Бокс кандидата это среднее двух боксов.
@@ -14,10 +14,14 @@ sum(min(найдено, истина)) / sum(найдено). Выбираетс
 нет, группа в псевдометки не попадает. Печатается и проверка между днями: пороги одного дня на другом дне.
 Сумки, бумаги и негативы в псевдометки не входят: по счётчикам train их точность отдельно не проверить.
 
-Выход в формате 8.1: `source = ov_pseudo`, `confidence` = минимум из двух моделей. Покрытие наследуется от
-входных файлов. Кадр без боксов не означает, что объектов на нём нет. Тестовые кадры обрабатываются только
-автоматически; для просмотра глазами пишутся листы только по train-строкам:
-ART/labels/ov_pseudo__v<N>_train_p*.jpg (кроп, псевдобоксы, счётчики train).
+Дни: в файл попадают боксы только на кадрах дней `--dates`, по умолчанию 27–28.10 (`TEST_DATES`). Пороги
+подобраны по счётчикам 25–26.10, поэтому боксы этих дней в обучение детектора отдавать нельзя (правило 12.4);
+дни записываются в карточку (`dates`).
+
+Выход в формате 8.1: `source = ov_pseudo`, `confidence` = минимум из двух моделей. Покрытие берётся от самого
+слабого входного файла (`train_only` < `targets` < `all`). Кадр без боксов не означает, что объектов на нём нет.
+Тестовые кадры обрабатываются только автоматически; для просмотра глазами пишутся листы только по train-строкам:
+ART/labels/ov_pseudo__v<N>_train_p*.jpg (кроп, псевдобоксы до фильтра по дням, счётчики train).
 """
 from __future__ import annotations
 
@@ -45,12 +49,24 @@ from ts.cv import FOLDS  # noqa: E402
 from ts.io import DET_COLUMNS  # noqa: E402
 
 SOURCE = 'ov_pseudo'
+TEST_DATES = ('2026-10-27', '2026-10-28')           # дни UTC, боксы которых пишутся в файл по умолчанию
+COVERAGE_ORDER = ['train_only', 'targets', 'all']   # от слабого покрытия к полному (раздел 8.1)
 # Группа -> (классы, счётчик train для проверки). Приоритет трека B: phone и plate.
 GROUPS = {'phone': (['phone'], 'items'), 'plate': (['plate', 'bowl'], 'dishes'), 'tray': (['tray'], 'dishes')}
 PRECISION_TARGET = 0.85   # запас над 0.8 из контракта: оценка по счётчикам завышает precision
 MIN_FOUND = 5
 SHEET_COLS, SHEET_ROWS, GAP, CAPTION_H = 3, 3, 10, 30
 COLORS = {'dishes': '#c77dff', 'items': '#ffd60a', None: '#ff4d4d'}
+
+
+def weakest_coverage(coverages: list[str]) -> str:
+    """Покрытие выходного файла: самое слабое из входных."""
+    return min(coverages, key=COVERAGE_ORDER.index)
+
+
+def keep_dates(dets: pd.DataFrame, dates, frame_dates: pd.Series) -> pd.DataFrame:
+    """Детекции на кадрах дней `dates`. `frame_dates`: `frame_id` -> день UTC (`ts.io.load_frames`)."""
+    return dets[dets.frame_id.map(frame_dates).isin(list(dates))]
 
 
 def candidates(a: pd.DataFrame, b: pd.DataFrame) -> pd.DataFrame:
@@ -170,6 +186,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('dets', nargs=2, help='два артефакта ART/dets без расширения: Grounding DINO и OWLv2')
     parser.add_argument('--version', type=int, default=1)
+    parser.add_argument('--dates', nargs='+', default=list(TEST_DATES), metavar='YYYY-MM-DD',
+                        help='дни UTC, боксы которых пишутся в файл (по умолчанию 27–28.10)')
     args = parser.parse_args()
 
     name = f'{SOURCE}__v{args.version}'
@@ -194,8 +212,12 @@ def main() -> None:
     parts = [select(cand[cand.class_name.isin(r['classes'])], r['thr']) for r in reports.values() if r['thr']]
     if not parts:
         print(f'Ни одна группа не достигла оценки precision {PRECISION_TARGET}: псевдометок нет.')
-    pseudo = pd.concat(parts, ignore_index=True) if parts else cand.iloc[:0].copy()
-    pseudo = pseudo.sort_values(['frame_id', 'class_name', 'x1', 'y1'], kind='stable').reset_index(drop=True)
+    selected = pd.concat(parts, ignore_index=True) if parts else cand.iloc[:0].copy()
+    selected = selected.sort_values(['frame_id', 'class_name', 'x1', 'y1'], kind='stable').reset_index(drop=True)
+    frame_dates = io.load_frames().set_index('frame_id')['date_utc']
+    pseudo = keep_dates(selected, args.dates, frame_dates).reset_index(drop=True)   # в файл: только дни --dates
+    print(f'дни {", ".join(sorted(args.dates))}: боксов {len(pseudo)} из {len(selected)}, '
+          f'на других днях отброшено {len(selected) - len(pseudo)}')
     pseudo['source'] = SOURCE
     pseudo['det_id'] = SOURCE + '_' + pseudo.frame_id + '_' + pseudo.groupby('frame_id', sort=False).cumcount().astype(str)
     pseudo['from_dt'] = pseudo['from_dt'].astype('Int64')
@@ -206,8 +228,10 @@ def main() -> None:
         'command': 'python tracks/ov/make_pseudo.py ' + ' '.join(sys.argv[1:]),
         'models': sorted({m for c in cards for m in c['models']}),
         'inputs': [f'dets/{n}.parquet' for n in args.dets] + ['train_labels.csv'],
-        'coverage': 'all' if all(c['coverage'] == 'all' for c in cards) else 'train_only',
+        'coverage': weakest_coverage([c['coverage'] for c in cards]),
         'frames_processed': cards[0]['frames_processed'],
+        'dates': sorted(args.dates),
+        'boxes_dropped_other_dates': int(len(selected) - len(pseudo)),
         'manual_labels_used': False,
         'uses_train_counters': True,
         'precision_target': PRECISION_TARGET, 'min_found': MIN_FOUND,
@@ -217,13 +241,14 @@ def main() -> None:
         'sha1': hashlib.sha1(out_path.read_bytes()).hexdigest(),
         'notes': 'согласие Grounding DINO и OWLv2 (тот же класс, совпадение по правилу 9.2.6); пороги выбраны '
                  'только по счётчикам train, боксы получены только моделями, ручной разметки и правок нет; '
-                 'precision_max это оценка сверху по счётчикам; кадр без боксов не означает отсутствие объектов',
+                 'precision_max это оценка сверху по счётчикам; кадр без боксов не означает отсутствие объектов; '
+                 'боксы записаны только на кадрах дней dates, frames_processed это кадры, обработанные моделями',
     }
     out_path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     check_dets(out_path)
     print(f'{name}: {len(pseudo)} боксов на {pseudo.frame_id.nunique()} кадрах -> {out_path}')
     print(pseudo.class_name.value_counts().to_string())
-    n = train_sheets(pseudo, rows, labels, out_path.with_suffix(''))
+    n = train_sheets(selected, rows, labels, out_path.with_suffix(''))   # просмотр на train: до фильтра по дням
     print(f'листы для просмотра: {n} train-строк -> {out_path.with_suffix("")}_train_p*.jpg')
 
 

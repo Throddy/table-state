@@ -20,6 +20,7 @@
 
 Варианты: один источник, объединение источников (`a|b`) и согласие двух источников (`a&b`: объект есть у обоих).
 Для dishes ко всем вариантам добавляются прод-подносы (вариант `+prod`), как требует DoD задачи C2.
+База сравнения для dishes: `2 × подносы` (`post.tray_mult = 2`, подтверждено на Public); `1 × подносы` для справки.
 Пороги: сетка с шагом 0.05, критерий: суммарная абсолютная ошибка (раздел 11.1), при равенстве середина плато.
 `best`: порог подобран на всех 231 строках. `oof`: порог подобран на одном дне, применён к другому (раздел 12.1).
 Все числа качества считает `ts.metric.score_frame` (формула организаторов).
@@ -48,6 +49,13 @@ GRID = np.round(np.arange(0.10, 0.901, 0.05), 2)
 NEGATIVES = [k for k, v in CLASS_TO_COUNTER.items() if v is None and k != 'table']
 DEDUP_IOU, SMALL_PX, CENTER_RATIO, BAG_MIN_SHARE = 0.5, 40.0, 0.5, 0.60
 BOX = ['x1', 'y1', 'x2', 'y2']
+TRAY_MULT = 2.0                          # множитель подносов в сборке трека A (`post.tray_mult`)
+ROWFEATS_COVERAGE = ('all', 'targets')   # с отладочным покрытием train_only счётчики по всем строкам не пишутся
+
+
+def partial_coverage(cards: dict) -> list[str]:
+    """Имена входных артефактов, покрытие которых не годится для `--rowfeats`."""
+    return [name for name, card in cards.items() if card.get('coverage') not in ROWFEATS_COVERAGE]
 
 
 def inter_area(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -201,9 +209,10 @@ def main() -> None:
         cards[name] = json.loads(path.with_suffix('.json').read_text(encoding='utf-8'))
         sources[name] = attach(pd.read_parquet(path), scope)
     if args.rowfeats is not None:
-        partial = [n for n, c in cards.items() if c['frames_processed']['n'] < scope.frame_id.nunique()]
+        partial = partial_coverage(cards)
         if partial:
-            raise SystemExit(f'--rowfeats требует детекции на всех {scope.frame_id.nunique()} целевых кадрах: {partial}')
+            raise SystemExit(f'--rowfeats требует coverage из {ROWFEATS_COVERAGE} (детекции на всех '
+                             f'{scope.frame_id.nunique()} целевых кадрах): {partial}')
     prod = attach(io.load_prod_dets().query("class_name == 'tray'"), scope)
     features, report = {}, {}
 
@@ -218,9 +227,12 @@ def main() -> None:
         variants = [((name,), '|') for name in sources]
         variants += [(pair, mode) for pair in itertools.combinations(sources, 2) for mode in ('|', '&')]
         if counter == 'dishes':
-            base = np.array([len(trays[j][0]) for j in train], float)
-            print(f"{counter:<8}{'prod (только подносы)':<34}{'':<14}{quality(labels, rows, counter, base, masks['all']):>10.3f}"
-                  f"{quality(labels, rows, counter, base, day['f26']):>7.3f}{quality(labels, rows, counter, base, day['f25']):>7.3f}")
+            for mult in (TRAY_MULT, 1.0):   # база сравнения: 2 × подносы; 1 × подносы для справки
+                base = mult * np.array([len(trays[j][0]) for j in train], float)
+                title = f'prod ({mult:g} × подносы)' + (', база' if mult == TRAY_MULT else '')
+                print(f"{counter:<8}{title:<34}{'':<14}{quality(labels, rows, counter, base, masks['all']):>10.3f}"
+                      f"{quality(labels, rows, counter, base, day['f26']):>7.3f}"
+                      f"{quality(labels, rows, counter, base, day['f25']):>7.3f}")
         for names, mode in variants:
             for with_prod in ([False, True] if counter == 'dishes' else [False]):
                 def count(j: int, combo: tuple) -> int:
