@@ -1,0 +1,163 @@
+"""Тесты трека C: замечания ревью PR #3 (фильтр по дням, покрытие в карточках). Запуск: pytest tracks/ov."""
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import eval_dets  # noqa: E402
+import make_pseudo  # noqa: E402
+import run_ov  # noqa: E402
+
+from ts import io, paths  # noqa: E402
+
+needs_data = pytest.mark.skipif(not (paths.DATA / 'tables.csv').is_file(), reason='нет каталога данных TS_DATA')
+needs_rows = pytest.mark.skipif(not (paths.ART / 'rows_ext.parquet').is_file(), reason='нет rows_ext.parquet')
+
+
+def test_keep_dates_default_is_test_days_only():
+    frame_dates = pd.Series({'a': '2026-10-25', 'b': '2026-10-26', 'c': '2026-10-27', 'd': '2026-10-28'})
+    dets = pd.DataFrame({'frame_id': ['a', 'b', 'c', 'c', 'd', 'unknown'], 'n': range(6)})
+    kept = make_pseudo.keep_dates(dets, make_pseudo.TEST_DATES, frame_dates)
+    assert kept.frame_id.tolist() == ['c', 'c', 'd']     # train-дни и неизвестный кадр не проходят
+    assert kept.n.tolist() == [2, 3, 4]                  # порядок и строки не меняются
+    assert make_pseudo.TEST_DATES == ('2026-10-27', '2026-10-28')
+
+
+def test_keep_dates_other_days_and_empty():
+    frame_dates = pd.Series({'a': '2026-10-25', 'c': '2026-10-27'})
+    dets = pd.DataFrame({'frame_id': ['a', 'c']})
+    assert make_pseudo.keep_dates(dets, ['2026-10-25'], frame_dates).frame_id.tolist() == ['a']
+    assert make_pseudo.keep_dates(dets.iloc[:0], make_pseudo.TEST_DATES, frame_dates).empty
+
+
+def test_weakest_coverage():
+    assert make_pseudo.weakest_coverage(['all', 'all']) == 'all'
+    assert make_pseudo.weakest_coverage(['all', 'targets']) == 'targets'
+    assert make_pseudo.weakest_coverage(['targets', 'targets']) == 'targets'
+    assert make_pseudo.weakest_coverage(['targets', 'train_only']) == 'train_only'
+    assert make_pseudo.weakest_coverage(['train_only', 'all']) == 'train_only'
+
+
+def test_run_ov_coverage():
+    assert run_ov.coverage_of('all', None) == 'all'
+    assert run_ov.coverage_of('targets', None) == 'targets'
+    assert run_ov.coverage_of('train', None) == 'train_only'
+    assert run_ov.coverage_of('train0', None) == 'train_only'
+    assert run_ov.coverage_of('targets', 8) == 'train_only'   # обрезанный прогон это отладка
+    assert run_ov.coverage_of('all', 8) == 'train_only'
+
+
+def test_rowfeats_needs_full_coverage():
+    cards = {'a': {'coverage': 'targets'}, 'b': {'coverage': 'all'}, 'c': {'coverage': 'train_only'}, 'd': {}}
+    assert eval_dets.partial_coverage(cards) == ['c', 'd']
+    assert eval_dets.TRAY_MULT == 2.0
+
+
+@needs_data
+@needs_rows
+def test_targets_frames_match_ts_check():
+    """Кадры прогона `--rows targets` это ровно набор, с которым `ts.check` сверяет `coverage: targets`."""
+    rows = run_ov.select_rows('targets', None)
+    frame_ids = sorted(rows.src_frame_id.unique())
+    expected = sorted(set(io.load_tables()['frame_id']))
+    assert set(rows.dt) == {0} and len(rows) == 4964
+    assert frame_ids == expected and len(frame_ids) == 839
+    assert (hashlib.sha1('\n'.join(frame_ids).encode()).hexdigest()
+            == hashlib.sha1('\n'.join(expected).encode('utf-8')).hexdigest())
+
+
+@needs_data
+@needs_rows
+def test_all_rows_cover_every_frame_and_neighbours():
+    """Прогон `--rows all` покрывает все 1718 кадров и строки `dt = ±30` (нужно для prev/next/med)."""
+    rows = run_ov.select_rows('all', None)
+    assert set(rows.src_frame_id) == set(io.load_frames()['frame_id']) and rows.src_frame_id.nunique() == 1718
+    assert set(rows.dt) == {-30, 0, 30}
+
+
+@needs_data
+def test_train_and_test_days_do_not_overlap():
+    dates = io.load_tables().groupby('split')['date_utc'].agg(set)
+    assert dates['test'] == set(make_pseudo.TEST_DATES)
+    assert not dates['train'] & set(make_pseudo.TEST_DATES)
+
+
+# ---------- соседние кадры (dt = ±30): режим --rows context и склейка merge_dets.py
+
+@needs_data
+@needs_rows
+def test_context_rows_complete_targets_to_all():
+    """`targets` и `context` не пересекаются и вместе дают ровно кропы прогона `all`."""
+    parts = {which: run_ov.select_rows(which, None) for which in ('targets', 'context', 'all')}
+    keys = {which: set(zip(rows.row_id, rows.dt)) for which, rows in parts.items()}
+    assert not keys['targets'] & keys['context']
+    assert keys['targets'] | keys['context'] == keys['all']
+    assert len(parts['context']) == len(parts['all']) - len(parts['targets']) == 5234
+    assert set(parts['context'].dt) == {-30, 30}          # целевые кадры не пересчитываются
+    assert run_ov.coverage_of('context', None) == 'train_only'   # часть сама по себе это не полное покрытие
+
+
+def _fake_part(rows: pd.DataFrame, which: str, source: str, version: int, folder: Path, **changes) -> str:
+    """Артефакт-заглушка: по одной детекции на кроп (бокс рамки стола), карточка как у `run_ov.py`."""
+    import merge_dets
+    name = f'{source}__v{version}'
+    dets = pd.DataFrame({'frame_id': rows.src_frame_id, 'source': source, 'class_name': 'plate', 'confidence': 0.5,
+                         'x1': rows.x1.clip(0, 1270), 'y1': rows.y1.clip(0, 710), 'x2': rows.x2.clip(5, 1280),
+                         'y2': rows.y2.clip(5, 720), 'from_row_id': rows.row_id, 'from_dt': rows.dt.astype('Int64')})
+    dets.insert(0, 'det_id', source + '_' + dets.frame_id + '_' + dets.groupby('frame_id').cumcount().astype(str))
+    dets = dets[(dets.x2 > dets.x1) & (dets.y2 > dets.y1)]
+    dets.to_parquet(folder / f'{name}.parquet', index=False)
+    card = {'name': name, 'kind': 'dets', 'owner': 'C', 'models': ['m@1'], 'coverage': 'train_only', 'rows': which,
+            'frames_processed': merge_dets.frames_card(rows), 'crops_processed': len(rows),
+            'manual_labels_used': False, 'uses_train_counters': False, 'prompt': 'p.txt', 'prompt_sha1': 'abc',
+            'crop': {'kind': 'top', 'scale': 4.0}, 'min_conf': 0.1, 'nms_iou': 0.5, 'max_table_frac': 0.6,
+            'same_crop_iou': 0.8, 'fp16': False, **changes}
+    (folder / f'{name}.json').write_text(__import__('json').dumps(card), encoding='utf-8')
+    return name
+
+
+@needs_data
+@needs_rows
+def test_merge_targets_and_context_gives_coverage_all(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    import merge_dets
+    from ts.check import check_dets
+    parts = {which: run_ov.select_rows(which, None) for which in ('targets', 'context')}
+    shutil.copy(paths.ART / 'rows_ext.parquet', tmp_path / 'rows_ext.parquet')
+    monkeypatch.setattr(paths, 'ART', tmp_path)
+    (tmp_path / 'dets').mkdir()
+    names = [_fake_part(parts[which], which, 'ov_gdino', version, tmp_path / 'dets')
+             for which, version in (('targets', 1), ('context', 20))]
+    monkeypatch.setattr(sys, 'argv', ['merge_dets.py', *names, '--version', '2'])
+    merge_dets.main()
+
+    out = tmp_path / 'dets' / 'ov_gdino__v2.parquet'
+    check_dets(out)
+    dets, card = pd.read_parquet(out), json.loads(out.with_suffix('.json').read_text(encoding='utf-8'))
+    assert card['coverage'] == 'all' and card['frames_processed']['n'] == 1718 and card['crops_processed'] == 10198
+    assert card['context_features'] is True and card['manual_labels_used'] is False
+    assert dets.det_id.is_unique and dets.frame_id.nunique() == 1718
+    assert set(dets.from_dt.astype(int)) == {-30, 0, 30}
+    part_rows = sum(len(pd.read_parquet(tmp_path / 'dets' / f'{n}.parquet')) for n in names)
+    assert len(dets) == part_rows                              # ничего не потеряно и не задвоено
+
+    # повторный запуск ничего не перезаписывает
+    before = out.read_bytes()
+    merge_dets.main()
+    assert out.read_bytes() == before
+
+    # части с разными параметрами, в другом порядке или неполные не склеиваются
+    other = _fake_part(parts['context'], 'context', 'ov_gdino', 21, tmp_path / 'dets', prompt_sha1='other')
+    cut = _fake_part(parts['context'].head(100), 'context', 'ov_gdino', 22, tmp_path / 'dets')
+    for bad in ([names[0], other], [names[1], names[0]], [names[0], cut]):
+        monkeypatch.setattr(sys, 'argv', ['merge_dets.py', *bad, '--version', '3'])
+        with pytest.raises(SystemExit):
+            merge_dets.main()
+    assert not (tmp_path / 'dets' / 'ov_gdino__v3.parquet').exists()

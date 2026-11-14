@@ -7,6 +7,8 @@
   python tracks/ov/run_ov.py --source ov_gdino --rows targets            # целевые кадры (dt = 0) -> ov_gdino__v1
   python tracks/ov/run_ov.py --source ov_owl --rows targets --batch 2 --fp16   # то же для OWLv2 на GPU
   python tracks/ov/run_ov.py --source ov_gdino                           # все 1718 кадров, с соседями
+  python tracks/ov/run_ov.py --source ov_gdino --rows context --version 20     # только соседи (dt = ±30) к готовому
+                                                                         # прогону targets, затем merge_dets.py
   python tracks/ov/run_ov.py --source ov_gdino --rows train0 --version 91 --prompt-version 1   # отладка на train
   python tracks/ov/run_ov.py --source ov_owl --smoke 8                   # проверка на 8 строках, файлы удаляются
 
@@ -219,8 +221,34 @@ def unique_crops(rows: pd.DataFrame) -> pd.DataFrame:
     return rows.loc[sorted(keep)].reset_index(drop=True)
 
 
+def shard_of(crops: pd.DataFrame, shard: str | None) -> pd.DataFrame:
+    """Доля K/N по кадрам-источникам: кадр целиком попадает в одну долю, доли считаются на разных GPU."""
+    if not shard:
+        return crops
+    try:
+        k, n = (int(v) for v in shard.split('/'))
+    except ValueError:
+        raise SystemExit(f'--shard: ожидается K/N, получено {shard!r}')
+    if not (n > 0 and 0 <= k < n):
+        raise SystemExit(f'--shard: нужно 0 <= K < N, получено {shard!r}')
+    frames = sorted(crops.src_frame_id.unique())
+    return crops[crops.src_frame_id.isin(frames[k::n])].reset_index(drop=True)
+
+
+def coverage_of(which: str, limit: int | None, shard: str | None = None) -> str:
+    """Значение `coverage` карточки (раздел 8.1): все кадры, все целевые кадры или отладочная часть."""
+    if limit is not None or shard:
+        return 'train_only'
+    return {'all': 'all', 'targets': 'targets'}.get(which, 'train_only')
+
+
 def select_rows(which: str, limit: int | None, shard: str | None = None) -> pd.DataFrame:
     rows = load_rows_ext()
+    if which == 'context':   # кропы прогона all, которых нет в прогоне targets: соседние кадры (dt = ±30)
+        every, done = unique_crops(rows.reset_index(drop=True)), unique_crops(rows[rows.dt == 0].reset_index(drop=True))
+        seen = set(zip(done.row_id, done.dt))
+        crops = every[[key not in seen for key in zip(every.row_id, every.dt)]].reset_index(drop=True)
+        return shard_of(crops, shard).head(limit)
     if which in ('train', 'train0'):
         rows = rows[rows.split == 'train']
     if which in ('targets', 'train0'):
@@ -230,26 +258,17 @@ def select_rows(which: str, limit: int | None, shard: str | None = None) -> pd.D
         # в прогоне --rows targets, и привязка ts.assign берёт их по src_frame_id.
         target_frames = set(rows.loc[rows.dt == 0, 'frame_id'])
         rows = rows[(rows.dt != 0) & ~rows.src_frame_id.isin(target_frames)]
-    crops = unique_crops(rows.reset_index(drop=True))
-    if shard:
-        # Доля K/N по кадрам-источникам: кадр целиком попадает в одну долю, доли считаются на разных GPU.
-        try:
-            k, n = (int(v) for v in shard.split('/'))
-        except ValueError:
-            raise SystemExit(f'--shard: ожидается K/N, получено {shard!r}')
-        if not (n > 0 and 0 <= k < n):
-            raise SystemExit(f'--shard: нужно 0 <= K < N, получено {shard!r}')
-        frames = sorted(crops.src_frame_id.unique())
-        crops = crops[crops.src_frame_id.isin(frames[k::n])].reset_index(drop=True)
-    return crops.head(limit)
+    return shard_of(unique_crops(rows.reset_index(drop=True)), shard).head(limit)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--source', required=True, choices=list(MODELS))
     parser.add_argument('--version', type=int, default=1, help='суффикс артефакта: <source>__v<N>')
-    parser.add_argument('--rows', default='all', choices=['all', 'targets', 'neighbours', 'train', 'train0'],
+    parser.add_argument('--rows', default='all', choices=['all', 'targets', 'context', 'neighbours', 'train', 'train0'],
                         help='all: все 1718 кадров; targets: только целевые кадры (dt = 0, 4964 строки); '
+                             'context: кропы all, которых нет в targets (соседи dt = ±30, 5234 кропа), '
+                             'склейка с targets: merge_dets.py; '
                              'train: train-дни с соседями; train0: только целевые train-кадры')
     parser.add_argument('--prompt-version', type=int, default=1, help='файл промпта tracks/ov/prompts/*_v<P>.txt')
     parser.add_argument('--device', help='cuda, cuda:1 или cpu; по умолчанию cuda, если есть')
@@ -343,14 +362,15 @@ def main() -> None:
     dets[DET_COLUMNS].to_parquet(out_path, index=False)
 
     frame_ids = sorted(rows.src_frame_id.unique())
+    dts = sorted(int(v) for v in rows.dt.unique())
     card = {
         'name': name, 'kind': 'dets', 'owner': 'C', 'created_utc': utc_now(), 'git_sha': code_sha(),
         'command': 'python tracks/ov/run_ov.py ' + ' '.join(sys.argv[1:]),
         'models': [state['model']],
         'inputs': ['rows_ext.parquet'],
-        # ts.check знает только all и train_only (частичное покрытие); что именно обработано, сказано в rows
-        'coverage': 'all' if args.rows == 'all' and args.limit is None else 'train_only',
+        'coverage': coverage_of(args.rows, args.limit, args.shard),
         'rows': (args.rows + (f', доля {args.shard}' if args.shard else '')) if args.limit is None else f'{args.rows}, первые {args.limit}',
+        'dt': dts, 'context_features': coverage_of(args.rows, args.limit, args.shard) == 'all',   # prev/next/med: только all
         'frames_processed': {'n': len(frame_ids), 'sha1': hashlib.sha1('\n'.join(frame_ids).encode()).hexdigest()},
         'crops_processed': len(rows),
         'manual_labels_used': False,
@@ -360,7 +380,10 @@ def main() -> None:
         'max_table_frac': MAX_TABLE_FRAC, 'same_crop_iou': SAME_CROP_IOU, 'fp16': fp16,
         'device': torch.cuda.get_device_name(device) if device != 'cpu' else 'cpu',
         'torch': torch.__version__, 'transformers': transformers.__version__,
-        'notes': f'строки: {args.rows}; один кроп на стол каждого кадра-источника (from_row_id это строка кропа); '
+        'notes': f'строки: {args.rows}; '
+                 + ('посчитан только для dt = 0, контекстные признаки prev/next/med недоступны; ' if dts == [0] else '')
+                 + ('часть прогона all без кропов targets, склейка: merge_dets.py; ' if args.rows == 'context' else '')
+                 + 'один кроп на стол каждого кадра-источника (from_row_id это строка кропа); '
                  'один класс на бокс (лучшее понятие промпта, включая негативы и table); '
                  f'боксы не класса table крупнее {MAX_TABLE_FRAC} площади рамки стола отброшены; '
                  'объект в кропах двух столов записан дважды, дедупликация в ts.assign',
