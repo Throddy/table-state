@@ -1,4 +1,4 @@
-"""Проверка двух типов пропусков people (задача B6): находит ли источник людей нужного стола.
+"""Проверка двух типов пропусков people: находит ли источник людей нужного стола.
 
 По умолчанию две train-строки из tracks/core/PEOPLE_ERRORS.md:
   q_c5311f5b4593b510f144  слот 6, второй человек у правого края кадра (истина 2);
@@ -7,7 +7,7 @@
 
 Запуск:
   python tracks/det/check_people.py --sources prod coco_person__v1 [ft_yolo__v1]
-Печатает по каждой строке и источнику людей, привязанных `ts.assign` (правила R1 без фильтра площади),
+Печатает по каждой строке и источнику людей, привязанных `ts.assign` (сборка R1 без фильтра площади),
 и всех кандидатов person в зоне seat. Листы с боксами: report/sheets/people_<frame_id>.jpg.
 """
 from __future__ import annotations
@@ -19,6 +19,8 @@ import pandas as pd
 import yaml
 from PIL import Image, ImageDraw
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # модуль common лежит в tracks/det
 import common
 
 from ts import io

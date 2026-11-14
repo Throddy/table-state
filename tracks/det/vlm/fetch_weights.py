@@ -1,4 +1,4 @@
-"""Веса VLM-счётчика (задача C3) с зафиксированной ревизией Hugging Face (разделы 6 и 6.1 контракта).
+"""Веса VLM-счётчика с зафиксированной ревизией Hugging Face.
 
 Запуск (один раз, с сетью): python tracks/det/vlm/fetch_weights.py [--out ART/models/qwen3-vl-4b-instruct]
 На Kaggle те же файлы берутся из Kaggle Models `qwen-lm/qwen-3-vl/transformers/4b-instruct/1`

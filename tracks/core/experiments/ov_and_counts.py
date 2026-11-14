@@ -7,7 +7,7 @@
 при равенстве более строгая пара. Тестовые строки: пороги со всего train; train-строки: пороги другого дня.
 Выход: ART/rowfeats/ovand__v1.parquet (`ovand__cups`, `ovand__ok`) и карточка.
 
-Ограничение: значения train-строк получены с порогами другого дня (out-of-fold, раздел 8.5). Колонку можно
+Ограничение: значения train-строк получены с порогами другого дня (out-of-fold). Колонку можно
 использовать только фиксированным правилом (как `compose: baseline_max`). Обучать на ней модель внутри фолда
 нельзя: значения строк дня подгонки зависят от счётчиков дня проверки.
 """
@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
 from _bootstrap import git_sha  # noqa: E402
 
 from ts import io, orgbase, paths  # noqa: E402

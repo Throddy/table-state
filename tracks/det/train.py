@@ -1,4 +1,4 @@
-"""Обучение своего детектора (задача B4). Только на Kaggle (GPU), локально допустима лишь короткая отладка.
+"""Обучение своего детектора. Только на Kaggle (GPU), локально допустима лишь короткая отладка.
 
 Запуск одной ячейкой:
   python tracks/det/train.py --config tracks/det/configs/ft_yolo_v1.yaml \
@@ -150,7 +150,7 @@ def main() -> None:
     }
     trained_on = sorted(set(data_card['pseudo_dates']) & set(TRAIN_DATES))
     if trained_on:
-        card['trained_on_dates'] = trained_on      # раздел 8.6: для такого источника действует правило 12.4
+        card['trained_on_dates'] = trained_on      # такой источник на train-днях оценивается отдельной версией, не видевшей этот день
     final.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     print(f'\n{name}: эпох {card["epochs_done"]}, веса {final}, карточка {final.with_suffix(".json").name}')
     print(f'время этого запуска: {elapsed / 3600:.2f} ч на {common.device_name(device)} (для учёта квоты GPU)')

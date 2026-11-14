@@ -1,4 +1,4 @@
-"""Единая точка воспроизводимого запуска (раздел 15.1 контракта).
+"""Единая точка воспроизводимого запуска.
 
   python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/COMBO.yaml --out submission.csv
 

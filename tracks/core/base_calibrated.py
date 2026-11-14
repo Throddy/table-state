@@ -1,9 +1,9 @@
-"""Опорное предсказание `base_calibrated` (задача A2): бейзлайн организаторов, режим calibrated, без изменений.
+"""Опорное предсказание `base_calibrated` : бейзлайн организаторов, режим calibrated, без изменений.
 
 Запуск: python tracks/core/base_calibrated.py
 Пишет ART/preds/base_calibrated.csv (4964 строки) и карточку.
 - тест (4733 строки): `baseline.run(mode='calibrated')`, подгонка на всём train;
-- train (231 строка): out-of-fold по дням (раздел 12.1) тем же `calibrated_prediction`.
+- train (231 строка): out-of-fold по дням тем же `calibrated_prediction`.
 """
 from __future__ import annotations
 

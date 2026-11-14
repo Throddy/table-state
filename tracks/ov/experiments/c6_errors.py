@@ -2,7 +2,7 @@
 
 Запуск (файл из Kaggle Dataset `victimestsate/ts-artifacts-dets` v5, `preds/COMBO.csv` и карточка `COMBO.json`):
   python tracks/ov/c6_errors.py <путь>/preds/COMBO.csv                       # печать таблицы
-  python tracks/ov/c6_errors.py <путь>/preds/COMBO.csv --write tracks/ov/C6_SLIDES.md   # и вставка в слайды
+  python tracks/ov/experiments/c6_errors.py <путь>/preds/COMBO.csv
 
 Проверки перед расчётом: в файле все 231 train-строка; в карточке рядом `train_pred: oof_by_date`; тестовые строки
 совпадают с итоговым сабмитом `submissions/COMBO.csv` (тот же COMBO, а не другая сборка). Тестовые строки в расчёт
@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from ts import COUNTS, PRED_COLUMNS, io, paths  # noqa: E402
 from ts.metric import score_frame  # noqa: E402
 

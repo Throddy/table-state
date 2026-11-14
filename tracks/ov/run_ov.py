@@ -1,4 +1,4 @@
-"""C2: zero-shot детекция посуды и вещей на узких кропах столов (раздел 13 контракта).
+"""Zero-shot детекция посуды и вещей на узких кропах столов .
 
 Источники: `ov_gdino` (Grounding DINO base) и `ov_owl` (OWLv2 large ensemble).
 Веса скачивает `tracks/ov/fetch_weights.py`, здесь сеть не используется.
@@ -236,7 +236,7 @@ def shard_of(crops: pd.DataFrame, shard: str | None) -> pd.DataFrame:
 
 
 def coverage_of(which: str, limit: int | None, shard: str | None = None) -> str:
-    """Значение `coverage` карточки (раздел 8.1): все кадры, все целевые кадры или отладочная часть."""
+    """Значение `coverage` карточки: все кадры, все целевые кадры или отладочная часть."""
     if limit is not None or shard:
         return 'train_only'
     return {'all': 'all', 'targets': 'targets'}.get(which, 'train_only')

@@ -1,8 +1,8 @@
-"""Оценка файла предсказаний по схеме раздела 12.2.
+"""Оценка файла предсказаний по train: oof_all, фолды по дням, вид без выброса, ИК и цвет, bootstrap.
 
 Запуск: python tools/eval_pred.py artifacts/preds/<name>.csv [--bootstrap 1000] [--json out.json]
 Файл должен содержать как минимум 231 train-строку. Для предсказателей,
-подгонявшихся по счётчикам, train-строки должны быть out-of-fold (раздел 8.5).
+подгонявшихся по счётчикам, train-строки должны быть out-of-fold.
 """
 from __future__ import annotations
 

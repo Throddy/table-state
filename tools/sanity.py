@@ -1,4 +1,4 @@
-"""Сверка фактов раздела 4 контракта и опорных скоров таблицы 4.5.
+"""Сверка фактов о пакете данных и опорных скоров бейзлайна организаторов.
 
 Запуск: python tools/sanity.py
 При любом расхождении печатает список несовпадений и завершается с кодом 1.
@@ -20,9 +20,9 @@ FAILS: list[str] = []
 
 
 def expect(name: str, got, want) -> None:
-    """Сравнить факт с контрактом и запомнить расхождение."""
+    """Сравнить факт с ожидаемым значением и запомнить расхождение."""
     if got != want:
-        FAILS.append(f'{name}: получено {got}, в контракте {want}')
+        FAILS.append(f'{name}: получено {got}, ожидалось {want}')
 
 
 def counts(series: pd.Series) -> dict:
@@ -30,7 +30,7 @@ def counts(series: pd.Series) -> dict:
 
 
 def check_facts() -> None:
-    """Факты разделов 4.1–4.6."""
+    """Факты о файлах, кадрах, столах, счётчиках train, прод-детекторе и aux."""
     frames, targets, tables = io.load_frames(), io.load_targets(), io.load_tables()
     dets, labels, aux = io.load_prod_dets(), io.load_labels(), io.load_aux_boxes()
     sample = pd.read_csv(paths.DATA / 'sample_submission.csv')
@@ -99,7 +99,7 @@ def check_facts() -> None:
                                             people=('people', 'sum'), hands=('hands', 'sum'), cups=('cups', 'sum'))
     expect('25.10: строк/занято/people/hands/cups', by_day.loc['2026-10-25'].astype(int).tolist(), [126, 7, 9, 8, 7])
     expect('26.10: строк/занято/people/hands/cups', by_day.loc['2026-10-26'].astype(int).tolist(), [105, 16, 20, 21, 14])
-    # 4.4 (контракт 1.4): суммы по table_id и по slot различаются, потому что на
+    # Суммы по table_id и по slot различаются, потому что на
     # кадре-выбросе 5 рамок и его table_1 физически стоит в слоте 2.
     by_table = labels.groupby('table_id')[COUNTS].sum().astype(int)
     for n, want in {1: [15, 14, 11, 10, 9], 2: [1, 2, 1, 1, 1], 3: [6, 8, 7, 7, 8],
@@ -155,9 +155,9 @@ def reference_scores() -> list[tuple[str, str, dict, float, float]]:
 
 def main() -> int:
     check_facts()
-    print(f'Факты раздела 4: {"OK" if not FAILS else "есть расхождения"}')
+    print(f'Факты о данных: {"OK" if not FAILS else "есть расхождения"}')
     results = reference_scores()
-    print('\nОпорные скоры (раздел 4.5)')
+    print('\nОпорные скоры бейзлайна')
     print(f"{'вариант':<12}{'где':<24}{'score':>7}{'AP':>7}   " + ' '.join(f'{c:>7}' for c in COUNTS))
     for name, where, r, want_score, want_ap in results:
         print(f"{name:<12}{where:<24}{r['score']:>7.3f}{r['occupancy_ap']:>7.3f}   "
@@ -171,9 +171,9 @@ def main() -> int:
         print(f'\nSANITY FAILED, расхождений: {len(FAILS)}')
         for line in FAILS:
             print('  - ' + line)
-        print('Сначала ищите ошибку в своём коде и данных (раздел 16.8 контракта).')
+        print('Сначала ищите ошибку в своём коде и данных.')
         return 1
-    print('\nSANITY OK: факты раздела 4 и опорные скоры совпадают с контрактом.')
+    print('\nSANITY OK: факты о данных и опорные скоры бейзлайна совпадают с ожидаемыми.')
     return 0
 
 

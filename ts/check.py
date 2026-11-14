@@ -1,4 +1,4 @@
-"""Проверка форматов артефактов (разделы 7.9 и 8). Не прошёл проверку = не существует."""
+"""Проверка форматов артефактов. Артефакт, не прошедший проверку, в сборку не берётся."""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,7 @@ from .io import DET_COLUMNS
 from .rows import ROWS_EXT_COLUMNS, ROWS_EXT_NAME
 from . import paths
 
-# Канонический словарь классов (раздел 8.2): класс -> счётчик или None.
+# Канонический словарь классов: класс -> счётчик или None.
 CLASS_TO_COUNTER: dict[str, str | None] = {
     'person': 'people', 'hand': 'hands', 'cup': 'cups',
     'plate': 'dishes', 'bowl': 'dishes', 'tray': 'dishes',
@@ -31,7 +31,7 @@ N_ROWS = 4964
 
 
 class CheckError(ValueError):
-    """Артефакт не соответствует формату контракта."""
+    """Артефакт не соответствует формату."""
 
 
 def _fail(path: Path, message: str) -> None:
@@ -48,7 +48,7 @@ def _card(path: Path, required: list[str]) -> dict:
     """Прочитать карточку `<имя>.json` рядом с файлом и проверить обязательные поля."""
     card_path = path.with_suffix('.json')
     if not card_path.is_file():
-        _fail(path, f'нет карточки {card_path.name} (раздел 8.6)')
+        _fail(path, f'нет карточки {card_path.name} ')
     try:
         card = json.loads(card_path.read_text(encoding='utf-8'))
     except json.JSONDecodeError as error:
@@ -60,7 +60,7 @@ def _card(path: Path, required: list[str]) -> dict:
         if key in required and not isinstance(card[key], bool):
             _fail(path, f'поле карточки {key} должно быть true/false')
     if card.get('manual_labels_used'):
-        _fail(path, 'manual_labels_used = true: ручная разметка любых кадров пакета запрещена (правило R7)')
+        _fail(path, 'manual_labels_used = true: ручная разметка любых кадров пакета запрещена правилами соревнования')
     return card
 
 
@@ -188,7 +188,7 @@ def check_pred(path) -> None:
     if card['train_pred'] not in TRAIN_PRED_MODES:
         _fail(path, f'train_pred в карточке: одно из {sorted(TRAIN_PRED_MODES)}')
     if card['uses_train_counters'] and card['train_pred'] != 'oof_by_date':
-        _fail(path, 'uses_train_counters=true требует train_pred=oof_by_date (раздел 8.5)')
+        _fail(path, 'uses_train_counters=true требует train_pred=oof_by_date ')
 
 
 def check_rows_ext(path=None) -> None:
@@ -226,7 +226,7 @@ def check_rows_ext(path=None) -> None:
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(description='Проверка артефакта по контракту.')
+    parser = argparse.ArgumentParser(description='Проверка формата артефакта.')
     parser.add_argument('kind', choices=['dets', 'rowfeats', 'pred', 'rows_ext'])
     parser.add_argument('path', nargs='?')
     args = parser.parse_args()

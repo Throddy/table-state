@@ -7,7 +7,7 @@
   ov_train__v1/wide/<row_id>.png   зона wide, увеличение ×2.5
   ov_train__v1/sheet_p<N>.jpg      контактный лист: строки train с ненулевыми счётчиками
   ov_train__v1.parquet             индекс: строка × вид кропа, область и масштаб для обратного пересчёта
-  ov_train__v1.json                карточка (раздел 8.6)
+  ov_train__v1.json                карточка
 
 Только целевые train-кадры (dt = 0, 25–26.10). PNG без потерь: файл совпадает с тем, что вернёт
 `crop_table`. Готовый файл нужного размера не перезаписывается (перезапись: --force).
@@ -33,7 +33,7 @@ from ts.crops import CropMeta, crop_table, to_crop_coords  # noqa: E402
 from ts.rows import load_rows_ext  # noqa: E402
 
 NAME = 'ov_train__v1'
-KINDS = {'top': 4.0, 'wide': 2.5}   # вид кропа -> увеличение (раздел 9.1)
+KINDS = {'top': 4.0, 'wide': 2.5}   # вид кропа -> увеличение
 SHEET_COLS, SHEET_ROWS = 2, 2       # ячеек на странице контактного листа
 CAPTION_H, GAP = 58, 12
 BOX_COLOR = '#ffd60a'

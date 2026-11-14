@@ -1,4 +1,4 @@
-"""Валидация по дням и отчёт раздела 12.2 (раздел 7.8)."""
+"""Валидация по дням: фолды f25 и f26, объединённая оценка oof_all."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -74,7 +74,7 @@ def _bootstrap(labels: pd.DataFrame, pred: pd.DataFrame, n: int) -> dict:
 
 
 def evaluate(pred_or_fn, bootstrap: int = 1000) -> dict:
-    """Отчёт раздела 12.2.
+    """Отчёт по train: oof_all, f25, f26, вид без выброса, ИК и цвет, bootstrap.
 
     `pred_or_fn`: путь к csv или DataFrame с предсказаниями минимум на 231
     train-строку (для подгонявшихся предсказателей это должны быть
@@ -140,7 +140,7 @@ def format_report(report: dict) -> str:
 
 
 def log_row(report: dict, who: str, name: str, change: str, conclusion: str, when: str = '') -> str:
-    """Строка для журнала трека `experiments/LOG_<трек>.md` в формате раздела 8.7."""
+    """Строка для журнала трека `experiments/LOG_<трек>.md` в формате журнала."""
     a = report['oof_all']
     cells = [when, who, name, change, f"{a['score']:.4f}", f"{report['f25']['score']:.4f}",
              f"{report['f26']['score']:.4f}", f"{a['occupancy_ap']:.3f}"]

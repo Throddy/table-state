@@ -1,4 +1,4 @@
-"""Проверка и регистрация сабмита (раздел 14). На Kaggle ничего не отправляет.
+"""Проверка и регистрация сабмита. На Kaggle ничего не отправляет.
 
 Запуск:
   python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
@@ -60,7 +60,7 @@ def main() -> int:
     unique = int(submission['occ_prob'].nunique())
     if unique < MIN_UNIQUE_OCC:
         raise SystemExit(f'occ_prob: {unique} уникальных значений, нужно не меньше {MIN_UNIQUE_OCC} '
-                         '(AP зависит от порядка, раздел 1 контракта)')
+                         '(AP зависит только от порядка)')
 
     report = evaluate(pred, bootstrap=args.bootstrap)
     pred_card = json.loads(args.pred.with_suffix('.json').read_text(encoding='utf-8'))

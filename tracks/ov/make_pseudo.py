@@ -1,4 +1,4 @@
-"""C5: псевдометки для трека B из согласованных детекций Grounding DINO и OWLv2 (раздел 13 контракта).
+"""Псевдометки для трека B из согласованных детекций Grounding DINO и OWLv2 .
 
 Запуск:
   python tracks/ov/make_pseudo.py ov_gdino__v1 ov_owl__v1               # -> ART/labels/ov_pseudo__v1.parquet
@@ -50,10 +50,10 @@ from ts.io import DET_COLUMNS  # noqa: E402
 
 SOURCE = 'ov_pseudo'
 TEST_DATES = ('2026-10-27', '2026-10-28')           # дни UTC, боксы которых пишутся в файл по умолчанию
-COVERAGE_ORDER = ['train_only', 'targets', 'all']   # от слабого покрытия к полному (раздел 8.1)
+COVERAGE_ORDER = ['train_only', 'targets', 'all']   # от слабого покрытия к полному
 # Группа -> (классы, счётчик train для проверки). Приоритет трека B: phone и plate.
 GROUPS = {'phone': (['phone'], 'items'), 'plate': (['plate', 'bowl'], 'dishes'), 'tray': (['tray'], 'dishes')}
-PRECISION_TARGET = 0.85   # запас над 0.8 из контракта: оценка по счётчикам завышает precision
+PRECISION_TARGET = 0.85   # запас над 0.8: оценка по счётчикам завышает precision
 MIN_FOUND = 5
 SHEET_COLS, SHEET_ROWS, GAP, CAPTION_H = 3, 3, 10, 30
 COLORS = {'dishes': '#c77dff', 'items': '#ffd60a', None: '#ff4d4d'}

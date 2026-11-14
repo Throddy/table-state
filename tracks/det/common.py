@@ -22,13 +22,13 @@ from ts.check import check_dets  # noqa: E402
 from ts.io import DET_COLUMNS  # noqa: E402
 
 OWNER = 'B'
-CONF_MIN = 0.05   # раздел 8.1: сохраняем от 0.05, порог выбирает стекер
-NMS_IOU = 0.5     # раздел 8.1: NMS по классу внутри источника
+CONF_MIN = 0.05   # сохраняем детекции от 0.05, рабочий порог выбирает стекер
+NMS_IOU = 0.5     # NMS по классу внутри источника
 TRAIN_DATES = ('2026-10-25', '2026-10-26')
 TEST_DATES = ('2026-10-27', '2026-10-28')
 # Наборы классов своего детектора, порядок это номера классов YOLO.
 # v1 (решение роли A от 13.11): 4 класса, для которых есть псевдометки на всех кадрах.
-# v2 (задача B7, решение роли A): к классам v1 добавляются только те классы из OV_EXTRA, для которых в файле
+# v2 (самообучение): к классам v1 добавляются только те классы из OV_EXTRA, для которых в файле
 # псевдометок трека C (C5) реально есть боксы на псевдо-кадрах. personal_item и headphones не включаются:
 # на кадрах 27–28.10 у них нет меток. Набор v2 определяет build_dataset.py --classes auto.
 CLASS_SETS = {
@@ -50,7 +50,7 @@ def require_data() -> None:
 
 
 def setup_ultralytics() -> str:
-    """Ultralytics без сети (разделы 6 и 16.6). Вызывать до первого `import ultralytics`.
+    """Ultralytics без сети. Вызывать до первого `import ultralytics`.
 
     `YOLO_OFFLINE` выключает проверки обновлений, загрузку шрифтов и аналитику, `sync=False` и флаги
     интеграций это то же самое, что `yolo settings sync=False ...`. Возвращает версию пакета.
@@ -74,7 +74,7 @@ def load_model(weights: str | Path):
 
 
 def seed_everything(seed: int = SEED) -> None:
-    """Сид 419 и детерминированный cudnn (раздел 6)."""
+    """Сид 419 и детерминированный cudnn."""
     import torch
     random.seed(seed)
     np.random.seed(seed)
@@ -179,7 +179,7 @@ def nms_per_class(boxes: np.ndarray, scores: np.ndarray, classes: np.ndarray, io
 # ---------- запись порциями ----------
 
 class PartStore:
-    """Результат по порциям с пропуском уже обработанных (раздел 16.9).
+    """Результат по порциям с пропуском уже обработанных.
 
     Каждая порция это `part_<n>.parquet` и отметка `part_<n>.done.json` со списком обработанных единиц
     (кадров или строк). Отметка пишется последней, поэтому оборванная порция пересчитывается заново.
@@ -266,8 +266,8 @@ def finalize_dets(raw: pd.DataFrame, source: str) -> pd.DataFrame:
 def write_dets_artifact(dets: pd.DataFrame, source: str, version: int, card: dict) -> Path:
     """Записать `dets/<source>__v<N>.parquet` и карточку, затем проверить `ts.check.check_dets`.
 
-    Артефакты неизменяемы (раздел 5): существующий файл не перезаписывается. Файл, не прошедший
-    проверку, удаляется (по контракту он не существует), порции при этом остаются на месте.
+    Артефакты неизменяемы: существующий файл не перезаписывается. Файл, не прошедший
+    проверку, удаляется, порции при этом остаются на месте.
     """
     import pyarrow as pa
 
@@ -292,7 +292,7 @@ def write_dets_artifact(dets: pd.DataFrame, source: str, version: int, card: dic
 
 
 def dets_card(models: list[str], inputs: list[str], coverage: str, frame_ids, notes: str, **extra) -> dict:
-    """Карточка артефакта детекций по разделу 8.6 (поле `name` добавляет `write_dets_artifact`)."""
+    """Карточка артефакта детекций (поле `name` добавляет `write_dets_artifact`)."""
     frame_ids = sorted(set(frame_ids))
     return {
         'name': '',

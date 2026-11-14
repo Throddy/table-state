@@ -2,7 +2,7 @@
 
 Запуск: python tracks/det/avg_cols.py --base COMBO --other AB_ft2_hands_pp --col hands --name AB_ft2_hands_avg
 Берёт ART/preds/<base>.csv, заменяет колонку на 0.5·base + 0.5·other, остальные колонки остаются из base.
-Значения не округляются: дробный счётчик допустим как результат усреднения ансамбля (раздел 1 контракта).
+Значения не округляются: дробный счётчик допустим как результат усреднения двух прогнозов.
 Пишет ART/preds/<name>.csv с карточкой. Регистрация: tools/submit_gate.py.
 """
 from __future__ import annotations
@@ -10,6 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # модуль common лежит в tracks/det
 import common
 
 from ts import COUNTS, PRED_COLUMNS, io, paths
