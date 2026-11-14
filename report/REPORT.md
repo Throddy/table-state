@@ -172,6 +172,8 @@ python run.py --data data --artifacts artifacts --config configs/submissions/COM
 
 Проверено: файл совпадает с `submissions/COMBO.csv` (пять счётчиков точно, `occ_prob` до 2e-16).
 
+**Эталонный прогон на Kaggle.** Ноутбук https://www.kaggle.com/code/throddy/table-state-final-inference (версия 4, интернет выключен, без GPU) собирает сабмит из кода `throddy/table-state-code` (коммит `f9b52a7`) и кэшей `victimestsate/ts-artifacts-dets`, `throddy/ts-artifacts-ov-pseudo`. Результат: 4733 строки, валидатор организаторов пройден, 64 с; сверка с `submissions/COMBO.csv`: пять счётчиков совпадают точно, `occ_prob` до 2.2e-16. Тот же ноутбук собирает любой файл из `configs/submissions/` заменой `CONFIG`, включая `VLM_*` из кэша VLM.
+
 Детекции треков B и C читаются из `artifacts/` (Kaggle Datasets `victimestsate/ts-artifacts-dets` и `throddy/ts-artifacts-ov-pseudo`). Их пересчёт:
 
 ```bash
