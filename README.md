@@ -48,7 +48,7 @@
    python run.py --data data --artifacts artifacts --config configs/submissions/VLM_hands_avg.yaml --out submission.csv
    ```
 
-Проверено на чистом клоне 15.11.2026: шаг 1 занял 25 с, шаг 2 2 мин 40 с (из них 2 мин 20 с скачивание 570 МБ данных), шаг 3 35 с, оба файла `OK`.
+Проверено на чистом клоне 15.11.2026 (MacBook на Apple Silicon, окружение через `uv`): шаг 1 занял 17 с, шаг 2 1 мин 30 с (559 МБ данных и 2.4 МБ кэшей), шаг 3 1 мин 6 с, оба файла `OK`; шаг 4 занял 17 с, его `submission.csv` совпал с `submissions/VLM_hands_avg.csv` по всем счётчикам, `occ_prob` отличается не больше чем на 1.1e-16.
 
 ### в) Полный пересчёт источников
 
@@ -105,4 +105,4 @@ tests/                 тесты библиотеки (python -m pytest tests)
 - [report/REPORT.md](report/REPORT.md), отчёт: подход, валидация по дням, история на Public, ошибки по классам, время работы, соблюдение правил.
 - [MODELS.md](MODELS.md), модели, ссылки на веса, ревизии и лицензии.
 - Данные: соревнование https://www.kaggle.com/competitions/rascar-hack-case-2.
-- Кэши и код на Kaggle: датасеты `throddy/table-state-code`, `victimestsate/ts-artifacts-dets`, `throddy/ts-artifacts-ov-pseudo`, ноутбуки `throddy/ts-det-vlm-shards-0-1`, `throddy/notebook15b164940c`, `throddy/table-state-final-inference`. Они приватные, доступ открыт проверяющим.
+- Кэши и код на Kaggle: датасеты `throddy/table-state-code`, `victimestsate/ts-artifacts-dets`, `throddy/ts-artifacts-ov-pseudo`, ноутбуки `throddy/ts-det-vlm-shards-0-1`, `throddy/notebook15b164940c`, `throddy/table-state-final-inference`. Они приватные, доступ выдаётся на аккаунт Kaggle проверяющего.
