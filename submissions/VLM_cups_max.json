@@ -465,5 +465,6 @@
     "bootstrap": null,
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": 0.73416,
+  "public_lb_delta_vs_VLM_items": -0.00941
 }
