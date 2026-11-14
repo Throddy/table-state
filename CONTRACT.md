@@ -183,7 +183,7 @@ WAPE_k = sum|y_k - pred_k| / sum(y_k)
   - `OV_items_and_pp` 0.66401 (+0.019): items = вещи, найденные и Grounding DINO, и OWLv2, только при people ≥ 1;
   - `OV_dishes_owl_max` 0.67045 (+0.025): dishes = max(2 × подносы, счёт посуды OWLv2), то есть посуда на столах без подноса.
   Все три приняты. Не дали изменений в тесте и не отправлялись: `CP_people` (25 строк), `FT_people` (20), `CC_dishes` и `OV_dishes` (0: пороги по train отсекают миски и тарелки).
-- Текущая основа `COMBO` = `NB1` + эти три колонки, ожидание на Public около 0.700. Собирается по `configs/default.yaml` (он же `configs/submissions/COMBO.yaml`) и командой `python run.py`.
+- Текущая основа `COMBO` = `NB1` + эти три колонки, Собирается по `configs/default.yaml` (он же `configs/submissions/COMBO.yaml`) и командой `python run.py`. Public `COMBO` 0.69994 при ожидании 0.69993 по сумме трёх разниц: колонки складываются точно. `COMBO` выбран финальным на Kaggle как страховка.
 - Прежняя основа `NB1` = бейзлайн + `people` из `R1c`, Public 0.64519. Она же собирается по `configs/default.yaml` (блок `compose`, `post.tray_mult: 2.0`).
 - Наивный максимум по соседним кадрам для рук ухудшает hands с 0.586 до 0.414. Руки по контексту не усреднять.
 - Мягкий `occ_prob` (`0.6*[чел. сейчас] + 0.3*[чел. у соседей] + 0.1*[руки или чашки]`) поднимает AP на train с 0.746 до 0.930.

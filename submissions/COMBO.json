@@ -395,5 +395,7 @@
     },
     "n_params": null
   },
-  "public_lb": null
+  "public_lb": 0.69994,
+  "public_lb_delta_vs_NB1": 0.05475,
+  "public_lb_note": "ожидание по сумме трёх разниц 0.69993, факт 0.69994; выбран финальным на Kaggle как страховка"
 }
