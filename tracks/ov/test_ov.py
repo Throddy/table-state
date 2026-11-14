@@ -113,7 +113,7 @@ def _fake_part(rows: pd.DataFrame, which: str, source: str, version: int, folder
     dets = dets[(dets.x2 > dets.x1) & (dets.y2 > dets.y1)]
     dets.to_parquet(folder / f'{name}.parquet', index=False)
     card = {'name': name, 'kind': 'dets', 'owner': 'C', 'models': ['m@1'], 'coverage': 'train_only', 'rows': which,
-            'frames_processed': merge_dets.frames_card(rows), 'crops_processed': len(rows),
+            'frames_processed': merge_dets.frames_card(rows.src_frame_id), 'crops_processed': len(rows),
             'manual_labels_used': False, 'uses_train_counters': False, 'prompt': 'p.txt', 'prompt_sha1': 'abc',
             'crop': {'kind': 'top', 'scale': 4.0}, 'min_conf': 0.1, 'nms_iou': 0.5, 'max_table_frac': 0.6,
             'same_crop_iou': 0.8, 'fp16': False, **changes}
@@ -163,6 +163,43 @@ def test_merge_targets_and_context_gives_coverage_all(tmp_path, monkeypatch):
     assert not (tmp_path / 'dets' / 'ov_gdino__v3.parquet').exists()
 
 
+@needs_data
+@needs_rows
+def test_merge_targets_and_neighbour_shards_gives_coverage_all(tmp_path, monkeypatch):
+    """Ноутбук kaggle_owl_neighbours: ov_owl__v1 (targets) + доли neighbours 0/2 и 1/2 -> один источник, coverage all."""
+    import json
+    import shutil
+
+    import merge_dets
+    from ts.check import check_dets
+    shutil.copy(paths.ART / 'rows_ext.parquet', tmp_path / 'rows_ext.parquet')
+    monkeypatch.setattr(paths, 'ART', tmp_path)
+    (tmp_path / 'dets').mkdir()
+    targets = _fake_part(run_ov.select_rows('targets', None), 'targets', 'ov_owl', 1, tmp_path / 'dets', fp16=True)
+    shards = [_fake_part(run_ov.select_rows('neighbours', None, f'{k}/2'), f'neighbours, доля {k}/2', 'ov_owl', 2 + k,
+                         tmp_path / 'dets', fp16=True) for k in (0, 1)]
+    assert [len(run_ov.select_rows('neighbours', None, f'{k}/2')) for k in (0, 1)] == [2580, 2593]
+    monkeypatch.setattr(sys, 'argv', ['merge_dets.py', targets, *shards, '--version', '4'])
+    merge_dets.main()
+
+    out = tmp_path / 'dets' / 'ov_owl__v4.parquet'
+    check_dets(out)
+    dets, card = pd.read_parquet(out), json.loads(out.with_suffix('.json').read_text(encoding='utf-8'))
+    assert card['coverage'] == 'all' and card['frames_processed']['n'] == 1718
+    assert card['crops_processed'] == 4964 + 5173 and card['context_features'] is True
+    assert dets.det_id.is_unique and set(dets.from_dt.astype(int)) == {-30, 0, 30}
+    assert len(dets) == sum(len(pd.read_parquet(tmp_path / 'dets' / f'{n}.parquet')) for n in [targets, *shards])
+
+    # без одной доли, с повтором доли или с другим fp16 не склеивается
+    other = _fake_part(run_ov.select_rows('neighbours', None, '1/2'), 'neighbours, доля 1/2', 'ov_owl', 9,
+                       tmp_path / 'dets', fp16=False)
+    for bad in ([targets, shards[0]], [targets, shards[0], shards[0]], [targets, shards[0], other], [shards[0], targets]):
+        monkeypatch.setattr(sys, 'argv', ['merge_dets.py', *bad, '--version', '5'])
+        with pytest.raises(SystemExit):
+            merge_dets.main()
+    assert not (tmp_path / 'dets' / 'ov_owl__v5.parquet').exists()
+
+
 # ---------- лист с ошибками на train-кадрах (C6)
 
 def test_demo_error_frames_use_all_train_rows():
@@ -176,3 +213,42 @@ def test_demo_error_frames_use_all_train_rows():
     assert rows.abs_error.tolist() == [10] and rows.row_id.tolist() == ['r3']
     with pytest.raises(SystemExit):                          # без части train-строк лист не строится
         demo_errors.pick_error_frames(pred[pred.row_id != 'r2'], labels, 1)
+
+
+# ---------- таблица ошибок COMBO по дням (C6)
+
+@needs_data
+def test_c6_errors_table_and_checks(tmp_path):
+    import c6_errors
+    labels = io.load_labels()
+    sub = pd.read_csv(paths.ROOT / 'submissions' / 'COMBO.csv')
+    with pytest.raises(SystemExit):                       # файл сабмита без train-строк не подходит
+        c6_errors.load_oof(paths.ROOT / 'submissions' / 'COMBO.csv', None)
+
+    train = labels[['row_id', 'people', 'hands', 'cups', 'dishes', 'items']].assign(occ_prob=labels.occupied * 0.9)
+    train.loc[0, 'items'] += 2                            # один пересчёт на 2 вещи
+    oof = pd.concat([train, sub], ignore_index=True)
+    path = tmp_path / 'COMBO.csv'
+    oof.to_csv(path, index=False)
+    (tmp_path / 'COMBO.json').write_text('{"train_pred": "oof_by_date"}', encoding='utf-8')
+    text, numbers = c6_errors.table(c6_errors.load_oof(path, paths.ROOT / 'submissions' / 'COMBO.csv'))
+    day = '25.10' if labels.loc[0, 'date_utc'] == '2026-10-25' else '26.10'
+    assert numbers[day]['items'] == {**numbers[day]['items'], 'error': 2.0, 'under': 0.0, 'over': 2.0}
+    assert numbers['оба дня']['people']['error'] == 0 and numbers['оба дня']['people']['quality'] == 1.0
+    assert numbers['25.10']['rows'] + numbers['26.10']['rows'] == 231
+
+    (tmp_path / 'COMBO.json').write_text('{"train_pred": "zero_shot"}', encoding='utf-8')
+    with pytest.raises(SystemExit):                       # карточка не out-of-fold
+        c6_errors.load_oof(path, None)
+    sub.loc[0, 'people'] += 1
+    sub.to_csv(tmp_path / 'other.csv', index=False)
+    (tmp_path / 'COMBO.json').write_text('{"train_pred": "oof_by_date"}', encoding='utf-8')
+    with pytest.raises(SystemExit):                       # тест не совпадает с итоговым сабмитом
+        c6_errors.load_oof(path, tmp_path / 'other.csv')
+
+    slides = tmp_path / 'slides.md'
+    slides.write_text('до\n<!-- c6:errors:start -->\nстарое\n<!-- c6:errors:end -->\nпосле\n', encoding='utf-8')
+    c6_errors.write(slides, text, 'preds/COMBO.csv')
+    content = slides.read_text(encoding='utf-8')
+    assert content.startswith('до\n') and content.endswith('\nпосле\n') and 'старое' not in content
+    assert '| items |' in content and content.count('<!-- c6:errors:start -->') == 1

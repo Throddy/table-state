@@ -61,7 +61,22 @@ pytest tracks/ov                                                   # тесты 
    Output сохранить как версию датасета команды. Каталог `artifacts/models` из Output сохранить как датасет с весами:
    с ним следующие запуски идут без интернета.
 
-### Соседние кадры `dt = ±30` (эксперимент, на GPU не запускался)
+### Соседние кадры `dt = ±30` (на GPU не запускались)
+
+Основной вариант (решение трека A, 14.11): только OWLv2 и только кадры-соседи, которые сами не целевые
+(`--rows neighbours`, 879 кадров, 5173 кропа), двумя долями на двух T4, затем склейка с готовым `ov_owl__v1` в один
+источник `ov_owl__v4` с `coverage: all`. Ноутбук `kaggle_owl_neighbours.ipynb` (Internet `Off`, нужны датасет весов
+`ts-models-ov` и `throddy/ts-artifacts-ov-pseudo`):
+
+```bash
+python tracks/ov/run_ov.py --source ov_owl --rows neighbours --shard 0/2 --version 2 --prompt-version 2 --batch 2 --fp16
+python tracks/ov/run_ov.py --source ov_owl --rows neighbours --shard 1/2 --version 3 --prompt-version 2 --batch 2 --fp16
+python tracks/ov/merge_dets.py ov_owl__v1 ov_owl__v2 ov_owl__v3 --version 4   # -> dets/ov_owl__v4, coverage: all
+```
+
+Оценка времени по скорости прогона 13.11 (0.54 с на кроп): около 24 мин модельного времени на каждой карте.
+
+Вариант для обеих моделей через `--rows context`:
 
 Нужен для медианы по трём кадрам (раздел 10 контракта): `ts.temporal` строит `prev/next/med` только для источника
 с `coverage: all`. Целевые кадры не пересчитываются: считаются 5234 недостающих кропа на модель (у 95 строк из 4964
@@ -78,6 +93,14 @@ python tracks/ov/merge_dets.py ov_owl__v1 ov_owl__v20 --version 2         # -> d
 Save & Run All (ячейка 4б). `merge_dets.py` отказывается клеить части с разными моделью, промптом или параметрами.
 Проверка источника потом командой трека A: `python tools/try_source.py --source ov_owl__v2 --cols dishes ...`.
 
+### Офлайн-веса (`ts-models-ov`)
+
+`python tracks/ov/pack_weights.py --out <каталог>` скачивает обе модели с зафиксированными ревизиями, сверяет sha256
+весов с Hugging Face, проверяет загрузку без сети кодом `run_ov.py` и пишет `MANIFEST.json`; на Kaggle это ноутбук
+`kaggle_weights_ov.ipynb` (CPU, Internet `On`), его Output публикуется как датасет `ts-models-ov`. Проверка готового
+каталога без сети: `python tracks/ov/pack_weights.py --check artifacts/models`. `kaggle_setup.py` находит веса в
+подключённых датасетах сам; `OV_SOURCES=ov_owl` в окружении требует веса только OWLv2.
+
 ### Материалы для защиты (C6)
 
 Текст слайдов и источники чисел: [C6_SLIDES.md](C6_SLIDES.md). Очередь оператора (`report/demo_queue.*`) и два
@@ -87,6 +110,13 @@ Save & Run All (ячейка 4б). `merge_dets.py` отказывается кл
 
 ```bash
 python tracks/ov/demo_errors.py artifacts/preds/COMBO.csv   # report/demo_errors.jpg и report/demo_errors.csv
+```
+
+Таблица ошибок COMBO по классам за 25.10 и 26.10 (слайд 7) из `preds/COMBO.csv` с out-of-fold train-строками
+(`victimestsate/ts-artifacts-dets` v5); файл сверяется с карточкой и с `submissions/COMBO.csv`:
+
+```bash
+python tracks/ov/c6_errors.py <путь>/preds/COMBO.csv --write tracks/ov/C6_SLIDES.md
 ```
 
 ## TODO от ревью
