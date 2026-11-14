@@ -60,7 +60,7 @@ def main() -> None:
     if args.col == 'items':
         report_items(args.base, full)
     print()
-    swap(args.base, full, [args.col], args.name, args.note)
+    swap(args.base, full, [args.col], args.name, args.note, command='python tools/try_rowfeat.py ' + ' '.join(sys.argv[1:]))
 
 
 if __name__ == '__main__':

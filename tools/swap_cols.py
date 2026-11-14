@@ -33,7 +33,8 @@ def pred_path(name_or_path: str) -> Path:
     return path if path.suffix == '.csv' else paths.ART / 'preds' / f'{name_or_path}.csv'
 
 
-def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = None, gate: bool = True) -> Path:
+def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = None, gate: bool = True,
+         command: str | None = None) -> Path:
     """Собрать `ART/preds/<name>.csv`: файл `base` с колонками `cols` из `donor`, и провести через gate."""
     wrong = [c for c in cols if c not in PRED_COLUMNS[1:]]
     if wrong or not cols:
@@ -55,7 +56,7 @@ def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = N
         'name': name, 'kind': 'preds', 'owner': 'A',
         'created_utc': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'git_sha': sha,
-        'command': 'python tools/swap_cols.py ' + ' '.join(sys.argv[1:]),
+        'command': command or 'python tools/swap_cols.py ' + ' '.join(sys.argv[1:]),
         'swap': {**recipe, 'rows_changed': changed, 'base_git_sha': cards[0].get('git_sha'),
                  'donor_git_sha': cards[1].get('git_sha')},
         'models': sorted(set(cards[0].get('models', [])) | set(cards[1].get('models', []))),

@@ -158,7 +158,8 @@ def main() -> None:
     if 'dishes' in args.cols:
         report_dishes(args.base, full, cfg)
     print()
-    swap(args.base, full, args.cols, args.name, args.note, gate=not args.no_gate)
+    swap(args.base, full, args.cols, args.name, args.note, gate=not args.no_gate,
+         command='python tools/try_source.py ' + ' '.join(sys.argv[1:]))
 
 
 if __name__ == '__main__':

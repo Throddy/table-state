@@ -29,6 +29,12 @@ from ts.vendor import score as vscore
 MIN_UNIQUE_OCC = 200
 
 
+def rel(path: Path) -> str:
+    """Путь относительно корня репозитория; вне репозитория остаётся только имя файла (без домашних каталогов)."""
+    resolved = Path(path).resolve()
+    return str(resolved.relative_to(ROOT)) if resolved.is_relative_to(ROOT) else resolved.name
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -73,8 +79,8 @@ def main() -> int:
         'git_sha': sha,
         'git_dirty': dirty,
         'note': args.note,
-        'command': 'python tools/submit_gate.py ' + ' '.join(sys.argv[1:]),
-        'pred': str(args.pred),
+        'command': f'python tools/submit_gate.py --pred {rel(args.pred)} --config {rel(args.config)} --note "..."',
+        'pred': rel(args.pred),
         'pred_sha256': sha256(args.pred),
         'submission_sha256': sha256(out_csv),
         'rows': len(submission),

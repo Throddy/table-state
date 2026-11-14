@@ -233,7 +233,12 @@ def select_rows(which: str, limit: int | None, shard: str | None = None) -> pd.D
     crops = unique_crops(rows.reset_index(drop=True))
     if shard:
         # Доля K/N по кадрам-источникам: кадр целиком попадает в одну долю, доли считаются на разных GPU.
-        k, n = (int(v) for v in shard.split('/'))
+        try:
+            k, n = (int(v) for v in shard.split('/'))
+        except ValueError:
+            raise SystemExit(f'--shard: ожидается K/N, получено {shard!r}')
+        if not (n > 0 and 0 <= k < n):
+            raise SystemExit(f'--shard: нужно 0 <= K < N, получено {shard!r}')
         frames = sorted(crops.src_frame_id.unique())
         crops = crops[crops.src_frame_id.isin(frames[k::n])].reset_index(drop=True)
     return crops.head(limit)
