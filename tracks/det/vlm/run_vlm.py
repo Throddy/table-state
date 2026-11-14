@@ -98,7 +98,7 @@ def run(args, name: str) -> None:
     todo = mine[~mine['row_id'].isin(done)]
     if args.limit:
         todo = todo.head(args.limit)
-    print(f'[{name}] шард {args.shard}/{args.of}: строк {len(mine)}, осталось {len(todo)}', flush=True)
+    print(f'[{name}] шард {args.shard}/{args.of}: строк {len(mine)}, осталось {len(todo)}, dtype {args.dtype}, батч {args.batch}', flush=True)
     if todo.empty:
         return
     torch.manual_seed(common.SEED)
@@ -109,20 +109,27 @@ def run(args, name: str) -> None:
     prompt = (PROMPTS / f'{args.prompt_id}.txt').read_text(encoding='utf-8').strip()
     out = folder / f'shard_{args.shard}_of_{args.of}.jsonl'
     started = time.time()
+    processor.tokenizer.padding_side = 'left'        # для батча: ответ дописывается справа от промпта
+    records = list(todo.itertuples(index=False))
+    done_rows = 0
     with open(out, 'a', encoding='utf-8') as sink:
-        for n, row in enumerate(todo.itertuples(index=False), 1):
-            messages = [{'role': 'user', 'content': [{'type': 'image', 'image': row_image(row)}, {'type': 'text', 'text': prompt}]}]
-            inputs = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True,
-                                                   return_tensors='pt').to(model.device)
+        for start in range(0, len(records), args.batch):
+            batch = records[start:start + args.batch]
+            conversations = [[{'role': 'user', 'content': [{'type': 'image', 'image': row_image(row)},
+                                                            {'type': 'text', 'text': prompt}]}] for row in batch]
+            inputs = processor.apply_chat_template(conversations, tokenize=True, add_generation_prompt=True, return_dict=True,
+                                                   return_tensors='pt', padding=True).to(model.device)
             with torch.inference_mode():
-                ids = model.generate(**inputs, do_sample=False, max_new_tokens=MAX_NEW_TOKENS)
-            text = processor.batch_decode(ids[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)[0]
-            sink.write(json.dumps({'row_id': row.row_id, 'dt': 0, 'prompt_id': args.prompt_id, 'text': text}, ensure_ascii=False) + '\n')
+                ids = model.generate(**inputs, do_sample=False, max_new_tokens=args.max_new_tokens)
+            texts = processor.batch_decode(ids[:, inputs['input_ids'].shape[1]:], skip_special_tokens=True)
+            for row, text in zip(batch, texts):
+                sink.write(json.dumps({'row_id': row.row_id, 'dt': 0, 'prompt_id': args.prompt_id, 'text': text}, ensure_ascii=False) + '\n')
             sink.flush()
-            if n % 25 == 0 or n == len(todo):
-                rate = (time.time() - started) / n
-                print(f'[{name}] шард {args.shard}: {n}/{len(todo)}, {rate:.2f} с на строку, осталось около '
-                      f'{(len(todo) - n) * rate / 60:.1f} мин', flush=True)
+            done_rows += len(batch)
+            if done_rows % 24 < args.batch or done_rows == len(records):
+                rate = (time.time() - started) / done_rows
+                print(f'[{name}] шард {args.shard}: {done_rows}/{len(records)}, {rate:.2f} с на строку, осталось около '
+                      f'{(len(records) - done_rows) * rate / 60:.1f} мин', flush=True)
     print(f'[{name}] шард {args.shard}: время этого запуска {(time.time() - started) / 60:.1f} мин (для учёта квоты GPU)')
 
 
@@ -152,7 +159,7 @@ def merge(args, name: str) -> None:
             'not_ok_share': round(float((table[f'{SOURCE}__ok'] == 0).mean()), 4),
             'manual_labels_used': False, 'uses_train_counters': False,
             'params': {'prompt': sorted({f'tracks/det/vlm/prompts/{r["prompt_id"]}.txt' for r in raw}), 'crop': 'wide', 'scale': WIDE_SCALE, 'long_side': LONG_SIDE,
-                       'do_sample': False, 'max_new_tokens': MAX_NEW_TOKENS, 'dtype': args.dtype, 'seed': common.SEED},
+                       'do_sample': False, 'max_new_tokens': args.max_new_tokens, 'batch': args.batch, 'dtype': args.dtype, 'seed': common.SEED},
             'notes': 'счётчики VLM по широкому кропу с рамкой целевого стола; −1 и __ok = 0, если ответ не разобран'}
     path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     if args.subset == 'all':
@@ -172,6 +179,8 @@ def main() -> None:
     parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16', help='float32 только для отладки на CPU')
     parser.add_argument('--version', type=int, default=1)
     parser.add_argument('--prompt-id', default='vlm_v1', help='имя файла промпта в tracks/det/vlm/prompts без расширения')
+    parser.add_argument('--batch', type=int, default=1, help='строк в одном вызове generate')
+    parser.add_argument('--max-new-tokens', type=int, default=MAX_NEW_TOKENS)
     parser.add_argument('--limit', type=int, default=0, help='отладка: не больше N строк за запуск')
     parser.add_argument('--merge', action='store_true', help='собрать rowfeats из готовых шардов')
     args = parser.parse_args()
