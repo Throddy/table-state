@@ -267,13 +267,13 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                                 'baseline_avg': 0.5 * values + 0.5 * own}[compose[column]]
         # Финальные замены колонок счётчиком из rowfeats (например VLM). Применяются после постобработки:
         # правила по людям для рук и вещей уже отработали на people сборки и от замены people не меняются.
-        for column, rule in (cfg.get('overrides') or {}).items():
-            if not rule:
-                continue
+        steps = [(column, r) for column, rules in (cfg.get('overrides') or {}).items()
+                 for r in (rules if isinstance(rules, list) else [rules]) if r]
+        for column, rule in steps:
             rows_ = features.loc[pred['row_id']]
             mode = rule.get('mode', 'replace')
-            if mode not in ('replace', 'max', 'avg'):
-                raise ValueError(f'overrides.{column}: режим {mode!r}, допустимы replace, max и avg')
+            if mode not in ('replace', 'max', 'avg', 'avg_up'):
+                raise ValueError(f'overrides.{column}: режим {mode!r}, допустимы replace, max, avg и avg_up')
             ok_column = rule['column'].split('__')[0] + '__ok'
             if ok_column not in rows_:
                 raise ValueError(f'overrides.{column}: нет колонки {ok_column}, без неё ответы источника не проверить')
@@ -281,7 +281,11 @@ def make_fit_predict(cfg: dict, log: list | None = None):
             ok = np.isfinite(raw_value) & (raw_value >= 0) & (rows_[ok_column].to_numpy(float) == 1)
             value = np.clip(np.nan_to_num(raw_value), 0, 50)
             current = pred[column].to_numpy(float)
-            new = {'replace': value, 'max': np.maximum(current, value), 'avg': 0.5 * current + 0.5 * value}[mode]
+            # avg_up: половина шага вверх, current + 0.5·max(0, value − current) (среднее с max, без понижения)
+            new = {'replace': value, 'max': np.maximum(current, value), 'avg': 0.5 * current + 0.5 * value,
+                   'avg_up': current + 0.5 * np.maximum(0.0, value - current)}[mode]
+            if rule.get('need_people'):     # только за занятыми столами (people сборки >= 1)
+                ok = ok & (pred['people'].to_numpy(float) >= 1)
             pred[column] = np.where(ok, new, current)
         if cfg.get('overrides'):
             # Правила по людям (hands_need_people, hands_cap) и обрезка ещё раз: заменённые колонки проходят их
