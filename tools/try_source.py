@@ -101,6 +101,7 @@ def report_dishes(base: str, donor: str, cfg: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--source', required=True, nargs='+', help='имена файлов ART/dets/<source>__v<N> без расширения (один или несколько)')
+    parser.add_argument('--drop', nargs='+', default=[], help='убрать эти источники основы (например ft_yolo__v1 при проверке v2)')
     parser.add_argument('--classes', nargs='+', help='взять от новых источников только эти классы словаря 8.2')
     parser.add_argument('--cols', nargs='+', required=True, help='колонки, которые берём из сборки с источником')
     parser.add_argument('--base', required=True, help='базовое предсказание ART/preds/<base>.csv')
@@ -121,7 +122,9 @@ def main() -> None:
         print(f'ts.check: {source} OK')
     cfg = yaml.safe_load(args.config.read_text(encoding='utf-8'))
     # Источники основы (например ft_yolo для рук) и их ограничения сохраняются, новые добавляются к ним.
-    kept = [s for s in cfg['sources'].get('dets', ['prod']) if s not in args.source]
+    kept = [s for s in cfg['sources'].get('dets', ['prod']) if s not in args.source and s not in args.drop]
+    for dropped in args.drop:
+        (cfg['sources'].get('counters') or {}).pop(dropped, None)
     cfg['sources']['dets'] = list(args.source) if args.alone else kept + list(args.source)
     if not args.all_counters and not args.alone:
         cfg['sources']['counters'] = {**(cfg['sources'].get('counters') or {}),

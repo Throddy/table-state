@@ -34,7 +34,7 @@ def pred_path(name_or_path: str) -> Path:
 
 
 def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = None, gate: bool = True,
-         command: str | None = None) -> Path:
+         command: str | None = None, avg: bool = False) -> Path:
     """Собрать `ART/preds/<name>.csv`: файл `base` с колонками `cols` из `donor`, и провести через gate."""
     wrong = [c for c in cols if c not in PRED_COLUMNS[1:]]
     if wrong or not cols:
@@ -45,13 +45,14 @@ def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = N
     out = io.read_csv_exact(base_path).set_index('row_id')
     source = io.read_csv_exact(donor_path).set_index('row_id').loc[out.index]
     changed = {c: int((out[c] != source[c]).sum()) for c in cols}
-    out[cols] = source[cols]
+    # avg: среднее двух прогнозов без округления (ошибка метрики выпукла по прогнозу)
+    out[cols] = 0.5 * out[cols] + 0.5 * source[cols] if avg else source[cols]
     out_path = paths.art('preds', f'{name}.csv')
     out.reset_index()[PRED_COLUMNS].to_csv(out_path, index=False)
 
     cards = [json.loads(p.with_suffix('.json').read_text(encoding='utf-8')) for p in (base_path, donor_path)]
     sha, _ = git_sha()
-    recipe = {'base': base_path.stem, 'donor': donor_path.stem, 'cols': cols}
+    recipe = {'base': base_path.stem, 'donor': donor_path.stem, 'cols': cols, 'mode': 'average' if avg else 'replace'}
     card = {
         'name': name, 'kind': 'preds', 'owner': 'A',
         'created_utc': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -65,7 +66,7 @@ def swap(base: str, donor: str, cols: list[str], name: str, note: str | None = N
         'train_pred': 'oof_by_date' if 'oof_by_date' in (cards[0]['train_pred'], cards[1]['train_pred']) else 'zero_shot',
         'manual_labels_used': False,
         'uses_train_counters': bool(cards[0]['uses_train_counters'] or cards[1]['uses_train_counters']),
-        'notes': f'{base_path.stem} с колонками {", ".join(cols)} из {donor_path.stem}',
+        'notes': f'{base_path.stem} с колонками {", ".join(cols)} ' + (f'= среднее с {donor_path.stem}' if avg else f'из {donor_path.stem}'),
     }
     out_path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     recipe_path = out_path.with_suffix('.swap.yaml')
@@ -88,8 +89,9 @@ def main() -> None:
     parser.add_argument('--name', required=True)
     parser.add_argument('--note', help='вопрос, на который отвечает сабмит')
     parser.add_argument('--no-gate', action='store_true', help='только собрать ART/preds/<name>.csv')
+    parser.add_argument('--avg', action='store_true', help='вместо замены: 0.5 × колонка базы + 0.5 × колонка источника')
     args = parser.parse_args()
-    swap(args.base, args.donor, args.cols, args.name, args.note, gate=not args.no_gate)
+    swap(args.base, args.donor, args.cols, args.name, args.note, gate=not args.no_gate, avg=args.avg)
 
 
 if __name__ == '__main__':
