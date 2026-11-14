@@ -219,20 +219,31 @@ def unique_crops(rows: pd.DataFrame) -> pd.DataFrame:
     return rows.loc[sorted(keep)].reset_index(drop=True)
 
 
-def select_rows(which: str, limit: int | None) -> pd.DataFrame:
+def select_rows(which: str, limit: int | None, shard: str | None = None) -> pd.DataFrame:
     rows = load_rows_ext()
     if which in ('train', 'train0'):
         rows = rows[rows.split == 'train']
     if which in ('targets', 'train0'):
         rows = rows[rows.dt == 0]
-    return unique_crops(rows.reset_index(drop=True)).head(limit)
+    if which == 'neighbours':
+        # Только соседние кадры (dt = ±30), которые сами не целевые: для целевых кадров детекции уже есть
+        # в прогоне --rows targets, и привязка ts.assign берёт их по src_frame_id.
+        target_frames = set(rows.loc[rows.dt == 0, 'frame_id'])
+        rows = rows[(rows.dt != 0) & ~rows.src_frame_id.isin(target_frames)]
+    crops = unique_crops(rows.reset_index(drop=True))
+    if shard:
+        # Доля K/N по кадрам-источникам: кадр целиком попадает в одну долю, доли считаются на разных GPU.
+        k, n = (int(v) for v in shard.split('/'))
+        frames = sorted(crops.src_frame_id.unique())
+        crops = crops[crops.src_frame_id.isin(frames[k::n])].reset_index(drop=True)
+    return crops.head(limit)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--source', required=True, choices=list(MODELS))
     parser.add_argument('--version', type=int, default=1, help='суффикс артефакта: <source>__v<N>')
-    parser.add_argument('--rows', default='all', choices=['all', 'targets', 'train', 'train0'],
+    parser.add_argument('--rows', default='all', choices=['all', 'targets', 'neighbours', 'train', 'train0'],
                         help='all: все 1718 кадров; targets: только целевые кадры (dt = 0, 4964 строки); '
                              'train: train-дни с соседями; train0: только целевые train-кадры')
     parser.add_argument('--prompt-version', type=int, default=1, help='файл промпта tracks/ov/prompts/*_v<P>.txt')
@@ -242,6 +253,7 @@ def main() -> None:
     parser.add_argument('--chunk', type=int, default=120, help='строк в одной порции прогресса')
     parser.add_argument('--max-minutes', type=float, help='штатно остановиться после порции, если прошло столько минут')
     parser.add_argument('--limit', type=int, help='первые N строк, только для отладки')
+    parser.add_argument('--shard', metavar='K/N', help='доля K из N по кадрам-источникам (K от 0), для двух GPU')
     parser.add_argument('--smoke', type=int, metavar='N',
                         help='проверка на N train-строках: формат, скорость, память GPU; файлы удаляются')
     args = parser.parse_args()
@@ -266,12 +278,12 @@ def main() -> None:
     device = args.device or ('cuda' if torch.cuda.is_available() else 'cpu')
     fp16 = args.fp16 and device.startswith('cuda')
 
-    rows = select_rows(args.rows, args.limit)
+    rows = select_rows(args.rows, args.limit, args.shard)
     prompt_file = PROMPT_FILE[args.source].format(args.prompt_version)
     prompt = (PROMPTS / prompt_file).read_text(encoding='utf-8')
     repo, revision = MODELS[args.source]
     state = {
-        'source': args.source, 'rows': args.rows, 'limit': args.limit, 'n_rows': len(rows),
+        'source': args.source, 'rows': args.rows, 'shard': args.shard, 'limit': args.limit, 'n_rows': len(rows),
         'rows_sha1': hashlib.sha1('\n'.join(rows.row_id + ':' + rows.dt.astype(str)).encode()).hexdigest(),
         'model': f'{repo}@{revision}', 'prompt_sha1': hashlib.sha1(prompt.encode()).hexdigest(),
         'crop': [CROP_KIND, CROP_SCALE], 'min_conf': MIN_CONF[args.source], 'nms_iou': NMS_IOU,
@@ -333,7 +345,7 @@ def main() -> None:
         'inputs': ['rows_ext.parquet'],
         # ts.check знает только all и train_only (частичное покрытие); что именно обработано, сказано в rows
         'coverage': 'all' if args.rows == 'all' and args.limit is None else 'train_only',
-        'rows': args.rows if args.limit is None else f'{args.rows}, первые {args.limit}',
+        'rows': (args.rows + (f', доля {args.shard}' if args.shard else '')) if args.limit is None else f'{args.rows}, первые {args.limit}',
         'frames_processed': {'n': len(frame_ids), 'sha1': hashlib.sha1('\n'.join(frame_ids).encode()).hexdigest()},
         'crops_processed': len(rows),
         'manual_labels_used': False,
