@@ -50,8 +50,8 @@ def main() -> None:
     cfg['stack']['items_need_people'] = bool(args.need_people)
     cfg['compose'] = {**(cfg.get('compose') or {}), args.col: 'stack', 'hands': 'baseline'}
     cfg['post'].update({'hands_need_people': False, 'hands_cap': False})
-    if args.col == 'dishes':
-        cfg['post']['tray_mult'] = 1.0      # колонка rowfeats уже содержит свой счёт посуды
+    if args.col == 'dishes' and args.mode == 'replace':
+        cfg['post']['tray_mult'] = 1.0      # колонка rowfeats уже содержит свой счёт посуды; при max и median сравнивается с 2 × подносы
     full = f'{args.name}__src'
     build(full, cfg, notes=f'сборка для проверки колонки {args.column} из {args.rowfeats} как {args.col} ({args.mode})',
           command='python tools/try_rowfeat.py ' + ' '.join(sys.argv[1:]))
