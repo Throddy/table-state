@@ -161,3 +161,18 @@ def test_merge_targets_and_context_gives_coverage_all(tmp_path, monkeypatch):
         with pytest.raises(SystemExit):
             merge_dets.main()
     assert not (tmp_path / 'dets' / 'ov_gdino__v3.parquet').exists()
+
+
+# ---------- лист с ошибками на train-кадрах (C6)
+
+def test_demo_error_frames_use_all_train_rows():
+    import demo_errors
+    counts = demo_errors.COUNTS
+    labels = pd.DataFrame({'row_id': ['r1', 'r2', 'r3'], 'frame_id': ['a', 'a', 'b'], 'table_id': ['t1', 't2', 't1'],
+                           **{c: [1, 0, 2] for c in counts}})
+    pred = pd.DataFrame({'row_id': ['r3', 'r1', 'r2', 'test_row'], **{c: [0, 1, 1, 9] for c in counts}})
+    frames, rows = demo_errors.pick_error_frames(pred, labels, 1)
+    assert frames == ['b']                                   # ошибка 10 против 5 у кадра a
+    assert rows.abs_error.tolist() == [10] and rows.row_id.tolist() == ['r3']
+    with pytest.raises(SystemExit):                          # без части train-строк лист не строится
+        demo_errors.pick_error_frames(pred[pred.row_id != 'r2'], labels, 1)

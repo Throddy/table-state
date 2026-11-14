@@ -78,6 +78,17 @@ python tracks/ov/merge_dets.py ov_owl__v1 ov_owl__v20 --version 2         # -> d
 Save & Run All (ячейка 4б). `merge_dets.py` отказывается клеить части с разными моделью, промптом или параметрами.
 Проверка источника потом командой трека A: `python tools/try_source.py --source ov_owl__v2 --cols dishes ...`.
 
+### Материалы для защиты (C6)
+
+Текст слайдов и источники чисел: [C6_SLIDES.md](C6_SLIDES.md). Очередь оператора (`report/demo_queue.*`) и два
+сложных train-кадра на том же листе собирает трек A (`python tracks/core/demo_queue.py`), трек C свою версию демо
+не делает. Вспомогательный лист ошибок для любого файла с out-of-fold предсказаниями на 231 train-строке
+(в файле сабмита их нет), в демо не входит:
+
+```bash
+python tracks/ov/demo_errors.py artifacts/preds/COMBO.csv   # report/demo_errors.jpg и report/demo_errors.csv
+```
+
 ## TODO от ревью
 
 Замечания роли A по pull request #3 (C2 и C5), 13.11. PR влит, пункты не блокирующие, но их нужно закрыть до первого полного прогона.
@@ -106,5 +117,5 @@ Save & Run All (ячейка 4б). `merge_dets.py` отказывается кл
 | 8 | к сведению | проверка источника командой трека A, со стороны трека C правок не требует |
 | 9 | закрыто | `make_pseudo.py`: покрытие от самого слабого входа (`weakest_coverage`); `eval_dets.py --rowfeats` требует `coverage` из `all` или `targets` |
 
-Тесты: `pytest tracks/ov` (10 тестов). Перегенерация `ov_pseudo__v1` не требуется: `tracks/det/build_dataset.py`
+Тесты: `pytest tracks/ov` (11 тестов). Перегенерация `ov_pseudo__v1` не требуется: `tracks/det/build_dataset.py`
 и так берёт псевдометки только с кадров 27–28.10, новый фильтр убрал бы из файла лишь боксы 39 train-кадров.
