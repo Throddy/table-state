@@ -1,0 +1,6 @@
+# Рецепт сабмита: базовый файл и колонки, заменённые из другого предсказания.
+swap:
+  base: NB1
+  donor: OV_dishes_owl_max__src
+  cols:
+  - dishes

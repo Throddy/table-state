@@ -14,6 +14,8 @@ DEFAULTS = {
     'source': 'all',       # объединённый список объектов всех источников детекций (ts.temporal.merge_sources)
     # какой столбец агрегата идёт в счётчик: cur (текущий кадр) или med (правило раздела 10)
     'counts': {'people': 'cur', 'hands': 'cur', 'cups': 'cur', 'dishes': 'cur', 'items': None},
+    # items только при people >= 1 или если вещи есть на обоих соседних кадрах (оставленная вещь)
+    'items_need_people': False,
     'people_fill': True,   # правило раздела 10 для people: 0 сейчас, одинаково у соседей, есть руки
     # голосование с признаками строк (11.1): {counter: {column: '<source>__<имя>', mode: median | replace | max}}
     'vote': {},
@@ -61,6 +63,10 @@ def predict_counts(features: pd.DataFrame, cfg: dict | None) -> pd.DataFrame:
         prev, nxt = features[f'{src}__people__prev'], features[f'{src}__people__next']
         fill = (out['people'] == 0) & (prev > 0) & (prev == nxt) & (features[f'{src}__hands__cur'] > 0)
         out.loc[fill, 'people'] = prev[fill]
+    if p['items_need_people'] and p['counts'].get('items'):
+        prev, nxt = features[f'{src}__items__prev'], features[f'{src}__items__next']
+        stays = (prev > 0) & (nxt > 0)     # NaN (соседа нет или источник посчитан только для dt = 0) даёт False
+        out.loc[(out['people'] < 1) & ~stays, 'items'] = 0.0
     return out
 
 
@@ -199,13 +205,13 @@ def make_fit_predict(cfg: dict, log: list | None = None):
     В `log` дописываются подобранные параметры каждого вызова.
     """
     from . import post
-    from .features import assigned_for, build_features, split_sources
+    from .features import build_features, source_parts, split_sources
     from .rows import load_rows_ext
 
     sources = list(cfg['sources'].get('dets', [])) + list(cfg['sources'].get('rowfeats', []))
     dets, _ = split_sources(sources)
     rows = load_rows_ext()
-    parts = [assigned_for(source, cfg) for source in dets]
+    parts = source_parts(sources, cfg)
     p = _cfg(cfg)
     counters = {'n': 0}
 
@@ -228,17 +234,35 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                         'people_max_area': local['temporal'].get('people_max_area'),
                         'min_conf': local['temporal'].get('min_conf', {}),
                         'occ_coef': model.get('coef'), 'occ_intercept': model.get('intercept')})
-        pred = post.apply(predict(model, features.loc[predict_rows['row_id']], local), local)
+        raw = predict(model, features.loc[predict_rows['row_id']], local)
+        limits = (cfg['sources'].get('counters') or {})
+        if limits:
+            # Источник с ограничением sources.counters меняет только перечисленные колонки: остальные
+            # (включая people, от которого зависят правила по рукам, и occ_prob) считаются сборкой без него.
+            keep_new = {c for counters_ in limits.values() for c in counters_}
+            rest = [source for source in sources if source not in limits]
+            base_features = build_features(rest, local)
+            base_raw = predict(fit(base_features, train_rows, local), base_features.loc[predict_rows['row_id']], local)
+            for column in [c for c in PRED_COLUMNS[1:] if c not in keep_new]:
+                raw[column] = base_raw[column].to_numpy(float)
+        pred = post.apply(raw, local)
         compose = cfg.get('compose') or {}
-        unknown = set(compose.values()) - {'stack', 'baseline'}
+        unknown = set(compose.values()) - {'stack', 'baseline', 'baseline_max', 'baseline_avg'}
         if unknown:
-            raise ValueError(f'compose: неизвестный источник колонки {sorted(unknown)}, допустимы stack и baseline')
-        from_baseline = [c for c, origin in compose.items() if origin == 'baseline']
+            raise ValueError(f'compose: неизвестный источник колонки {sorted(unknown)}, '
+                             'допустимы stack, baseline, baseline_max и baseline_avg')
+        from_baseline = [c for c, origin in compose.items() if origin in ('baseline', 'baseline_max', 'baseline_avg')]
         if from_baseline:
             from . import orgbase
             base = orgbase.calibrated(train_rows, pred['row_id'].tolist()).set_index('row_id').loc[pred['row_id']]
             for column in from_baseline:
-                pred[column] = base[column].to_numpy(float)
+                values = base[column].to_numpy(float)
+                # baseline_max: максимум из колонки бейзлайна и своей сборки (новый источник только добавляет объекты)
+                own = pred[column].to_numpy(float)
+                # baseline_avg: среднее колонки бейзлайна и своей сборки без округления. Ошибка метрики это модуль,
+                # он выпуклый: среднее двух прогнозов не хуже среднего их ошибок, а при ошибках разного знака лучше обоих.
+                pred[column] = {'baseline': values, 'baseline_max': np.maximum(values, own),
+                                'baseline_avg': 0.5 * values + 0.5 * own}[compose[column]]
         return pred
 
     fit_predict.n_params = None

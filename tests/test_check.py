@@ -72,10 +72,16 @@ def dets():
     return io.load_prod_dets()
 
 
+def frames_sha1(coverage='all'):
+    import hashlib
+    ids = io.load_frames().frame_id if coverage == 'all' else io.load_tables().frame_id.unique()
+    return hashlib.sha1('\n'.join(sorted(ids)).encode()).hexdigest()
+
+
 def save_dets(tmp_path, df, name='prod__v1.parquet', **card):
     path = tmp_path / name
     df.to_parquet(path, index=False)
-    write_card(path, **{'coverage': 'all', 'frames_processed': {'n': 1718, 'sha1': 'x'}, **card})
+    write_card(path, **{'coverage': 'all', 'frames_processed': {'n': 1718, 'sha1': frames_sha1()}, **card})
     return path
 
 
@@ -106,7 +112,13 @@ def test_dets_card_rules(tmp_path, dets):
     with pytest.raises(CheckError, match='R7'):
         check_dets(save_dets(tmp_path, dets, manual_labels_used=True))
     on_targets = dets[dets.frame_id.isin(io.load_tables().frame_id)]
-    check_dets(save_dets(tmp_path, on_targets, coverage='targets', frames_processed={'n': 839, 'sha1': 'x'}))
+    check_dets(save_dets(tmp_path, on_targets, coverage='targets', frames_processed={'n': 839, 'sha1': frames_sha1('targets')}))
+    with pytest.raises(CheckError, match='вне заявленного'):
+        outside = dets[~dets.frame_id.isin(on_targets.frame_id)].head(1)
+        mixed = pd.concat([on_targets[on_targets.frame_id != on_targets.frame_id.iloc[0]], outside])
+        check_dets(save_dets(tmp_path, mixed, coverage='targets', frames_processed={'n': 839, 'sha1': frames_sha1('targets')}))
+    with pytest.raises(CheckError, match='sha1'):
+        check_dets(save_dets(tmp_path, dets, frames_processed={'n': 1718, 'sha1': 'x'}))
     with pytest.raises(CheckError, match='839'):
         check_dets(save_dets(tmp_path, on_targets, coverage='targets', frames_processed={'n': 39, 'sha1': 'x'}))
     with pytest.raises(CheckError, match='1718'):

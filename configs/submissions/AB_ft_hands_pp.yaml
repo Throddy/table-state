@@ -1,11 +1,15 @@
+# AB_ft_hands_pp: NB1, где hands = руки прод-детектора и ft_yolo v1 (порог confidence подбирается на train),
+# затем hands_need_people и hands_cap по колонке people основы. Сборка: python tracks/core/build_pred.py
+# --name AB_ft_hands_pp --config configs/submissions/AB_ft_hands_pp.yaml (нужен artifacts/dets/ft_yolo__v1.parquet).
 # Основной конфиг сборки. Меняет только роль A (раздел 5 контракта).
 seed: 419
 
 # Источники детекций и признаков строк, участвующие в сборке.
 # dets: prod или имя файла artifacts/dets/<source>__v<N> без расширения; rowfeats: artifacts/rowfeats/<source>__v<N>.
 sources:
-  dets: [prod]
+  dets: [prod, ft_yolo__v1]
   rowfeats: []
+  counters: {ft_yolo__v1: [hands]}     # от ft_yolo берутся только руки, остальные счётчики как в NB1
 
 slots:
   edges: [0, 275, 450, 690, 925, 1140, 1300]
@@ -31,7 +35,7 @@ rows:
 # Сборка NB1 (Public 0.64519): бейзлайн + people с добором по нижней трети.
 compose:
   people: stack        # +0.035 к качеству people на Public (AB_people)
-  hands: baseline      # своя привязка на Public не отличается (AB_hands)
+  hands: stack         # AB_ft_hands_pp: руки прод + ft_yolo v1 с постобработкой по людям
   cups: baseline
   dishes: stack        # подносы × post.tray_mult; при tray_mult = 2 совпадает с бейзлайном на тесте
   items: baseline      # приор items = 1 на Public чуть хуже модели бейзлайна (AB_items)
@@ -77,8 +81,8 @@ stack:
 
 # Постобработка (раздел 11.3). Каждое правило включается отдельно после проверки по 12.3.
 post:
-  hands_need_people: false
-  hands_cap: false
+  hands_need_people: true      # AB_ft_hands_pp: people = 0 -> hands = 0
+  hands_cap: true              # AB_ft_hands_pp: hands <= 2 · people
   round_counts: false
   clip: true
   empty_night: false

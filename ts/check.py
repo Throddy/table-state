@@ -1,6 +1,7 @@
 """Проверка форматов артефактов (разделы 7.9 и 8). Не прошёл проверку = не существует."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -119,6 +120,18 @@ def check_dets(path) -> None:
         _fail(path, f'coverage=targets требует frames_processed.n = {N_TARGET_FRAMES} (все целевые кадры), сейчас {n}')
     if n is not None and df['frame_id'].nunique() > n:
         _fail(path, 'кадров с детекциями больше, чем frames_processed.n')
+    # Заявленное покрытие сверяется с данными, а не принимается на веру.
+    expected = {'all': frames, 'targets': set(io.load_tables()['frame_id'])}.get(card['coverage'])
+    if expected is not None:
+        extra = set(df['frame_id']) - expected
+        if extra:
+            _fail(path, f"coverage={card['coverage']}: {len(extra)} frame_id вне заявленного набора кадров, "
+                        f'например {sorted(extra)[0]}')
+        declared = card['frames_processed'].get('sha1')
+        actual = hashlib.sha1('\n'.join(sorted(expected)).encode('utf-8')).hexdigest()
+        if declared != actual:
+            _fail(path, f"frames_processed.sha1 не совпадает с sha1 отсортированного списка кадров покрытия "
+                        f"'{card['coverage']}' (id через перевод строки): в карточке {declared}, должно быть {actual}")
 
 
 def check_rowfeats(path) -> None:

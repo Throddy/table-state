@@ -4,8 +4,9 @@ seed: 419
 # Источники детекций и признаков строк, участвующие в сборке.
 # dets: prod или имя файла artifacts/dets/<source>__v<N> без расширения; rowfeats: artifacts/rowfeats/<source>__v<N>.
 sources:
-  dets: [prod]
-  rowfeats: []
+  dets: [prod, ft_yolo__v1]
+  rowfeats: [ov_counts__v1]
+  counters: {ft_yolo__v1: [hands]}     # от ft_yolo берутся только руки
 
 slots:
   edges: [0, 275, 450, 690, 925, 1140, 1300]
@@ -28,13 +29,14 @@ rows:
 # Откуда берётся каждая колонка итогового предсказания (раздел 12.5: колонка меняется только после
 # проверки заменой на Public). stack = своя сборка (ts.stack), baseline = бейзлайн организаторов
 # (data/baseline.py, режим calibrated, подгоняется на тех же строках).
-# Сборка NB1 (Public 0.64519): бейзлайн + people с добором по нижней трети.
+# Сборка COMBO: NB1 (Public 0.64519) + руки ft_yolo (AB_ft_hands_pp 0.65585) + вещи при согласии двух моделей
+# трека C (OV_items_and_pp 0.66401) + посуда вне подносов от OWLv2 (OV_dishes_owl_max 0.67045).
 compose:
   people: stack        # +0.035 к качеству people на Public (AB_people)
-  hands: baseline      # своя привязка на Public не отличается (AB_hands)
+  hands: stack         # руки прод + ft_yolo v1, затем hands_need_people и hands_cap: +0.011 на Public
   cups: baseline
-  dishes: stack        # подносы × post.tray_mult; при tray_mult = 2 совпадает с бейзлайном на тесте
-  items: baseline      # приор items = 1 на Public чуть хуже модели бейзлайна (AB_items)
+  dishes: stack        # max(2 × подносы, счёт посуды OWLv2): +0.025 на Public
+  items: stack         # вещи, найденные обеими моделями трека C, только при people >= 1: +0.019 на Public
   occ_prob: baseline   # AP на Public одинаков (AB_occ), остаётся вариант бейзлайна
 
 # Привязка объектов к столам (раздел 9, ts.assign).
@@ -67,18 +69,21 @@ temporal:
 stack:
   source: all                  # объединённый список объектов всех источников из sources.dets
   # cur = текущий кадр, med = правило раздела 10. Для cups med на train хуже на 1 строку, поэтому пока cur.
-  counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: null}
+  counts: {people: cur, hands: cur, cups: cur, dishes: cur, items: cur}
+  items_need_people: true      # items только при people >= 1 или при вещах на обоих соседних кадрах
   people_fill: true            # people из соседей, если сейчас 0, у соседей одинаково и есть руки
   tune_people_area: false      # порог площади не подбирается, см. temporal.people_max_area
   tune_conf: true              # пороги confidence источников, кроме prod: по одному на (источник, счётчик)
   # голосование с признаками строк: {counter: {column: vlm_qwen__items, mode: median | replace | max}}
-  vote: {}
+  vote:
+    items: {column: ov_counts__items_gdino_and_owl, mode: replace}
+    dishes: {column: ov_counts__dishes_owl, mode: max}
   occ_C: 1.0
 
 # Постобработка (раздел 11.3). Каждое правило включается отдельно после проверки по 12.3.
 post:
-  hands_need_people: false
-  hands_cap: false
+  hands_need_people: true      # people = 0 -> hands = 0
+  hands_cap: true              # hands <= 2 · people
   round_counts: false
   clip: true
   empty_night: false
