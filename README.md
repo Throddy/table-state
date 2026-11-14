@@ -1,185 +1,108 @@
-# table-state
+# Table State
 
-Решение кейса 2 «Table State» (RASCAR.HACK): для каждой рамки стола на кадре предсказываем
-`people, hands, cups, dishes, items` и `occ_prob`.
+Решение кейса 2 RASCAR.HACK «Оператор зала». Для каждой рамки стола на кадре кафе предсказываются число людей, рук, чашек, посуды и личных вещей и вероятность того, что стол занят. Отмечены два финальных сабмита: `VLM_hands_avg` с Public 0.75957 и `VLM_items` с Public 0.74357.
 
-Правила работы, форматы артефактов и задачи треков: **[CONTRACT.md](CONTRACT.md)** (читать целиком перед началом).
-План и роли: [PLAN.md](PLAN.md). Журналы экспериментов по трекам: [experiments/LOG.md](experiments/LOG.md), одной таблицей: `python tools/log_all.py`.
+## Воспроизведение
 
-## Окружение
+Есть три пути, от самого простого к полному. Первые два собирают финал из сохранённых выходов моделей за минуту, третий пересчитывает модели на GPU.
 
-Python 3.12, ядро работает на CPU.
+### а) Kaggle, около минуты
 
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate   # или: uv venv --python 3.12 .venv
-pip install -r requirements.txt
-# трек B дополнительно: pip install -r tracks/det/requirements.txt (у каждого трека свой файл зависимостей)
-```
+1. Открыть ноутбук https://www.kaggle.com/code/throddy/table-state-final-inference.
+2. Нажать Copy & Edit, затем Run All. Интернет и GPU не нужны.
+3. На выходе `/kaggle/working/submission.csv` (это `VLM_hands_avg`) и `submission_VLM_items.csv`. Последняя ячейка сверяет оба файла с `submissions/` и падает при расхождении.
 
-## Данные и переменные окружения
+К ноутбуку подключены данные соревнования, код этого репозитория (`throddy/table-state-code`), кэши источников (`victimestsate/ts-artifacts-dets`, `throddy/ts-artifacts-ov-pseudo`) и вывод двух ноутбуков VLM (`throddy/ts-det-vlm-shards-0-1`, `throddy/notebook15b164940c`). Ответы VLM ноутбук склеивает из шардов сам, модель не запускается.
 
-Распакуйте пакет организаторов как есть в `data/` (в git не попадает, файлы не переименовывать).
-В `data/` должны лежать `frames.csv`, `tables.csv`, `train_labels.csv`, `im_*.jpg`, `aux_*.jpg` и остальное.
+### б) Локально из кэша
 
-| Переменная | По умолчанию | Что это |
-|---|---|---|
-| `TS_DATA` | `<корень репозитория>/data` | пакет организаторов |
-| `TS_ARTIFACTS` | `<корень репозитория>/artifacts` | общие артефакты (раздел 8 контракта), в git не попадают |
+Нужны Python 3.12, токен Kaggle в `~/.kaggle/` и принятые правила соревнования `rascar-hack-case-2`.
 
-Абсолютных путей в коде нет: всё идёт через `ts.paths.DATA`, `ts.paths.ART`, `ts.paths.art(kind, name)`.
+1. Склонировать репозиторий и поставить зависимости:
 
-## Проверка после клонирования
+   ```bash
+   git clone https://github.com/Throddy/table-state.git
+   cd table-state
+   python3.12 -m venv .venv          # или: uv venv --python 3.12 .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-```bash
-python data/check_data.py --data data   # валидатор пакета от организаторов
-python -m ts.rows                       # строит artifacts/rows_ext.parquet (около 5 секунд)
-python tools/sanity.py                  # факты раздела 4 и опорные скоры таблицы 4.5
-python -m pytest -q                     # тесты ts
-```
+2. Скачать пакет соревнования в `data/` и кэши источников в `artifacts/`. Скрипт сверяет пакет с `MANIFEST.sha256` организаторов и склеивает ответы VLM из шардов:
 
-`tools/sanity.py` должен напечатать `SANITY OK` и таблицу: detector 0.489 / 0.490, calibrated 0.551, нули 0.020.
+   ```bash
+   python tools/fetch_artifacts.py
+   ```
 
-## Команды
+3. Собрать оба финала и сверить их с сохранёнными сабмитами:
 
-```bash
-# оценка файла предсказаний по схеме 12.2 (oof_all, f25, f26, robust, ИК, bootstrap)
-python tools/eval_pred.py artifacts/preds/<name>.csv
+   ```bash
+   python tools/verify_final.py --out out
+   ```
 
-# проверка артефакта по контракту
-python -m ts.check dets artifacts/dets/<source>__v<N>.parquet
-python -m ts.check rowfeats artifacts/rowfeats/<source>__v<N>.parquet
-python -m ts.check pred artifacts/preds/<name>.csv
-python -m ts.check rows_ext
+   Ожидаемый вывод: по обоим файлам `OK`, счётчики совпадают побайтно, `occ_prob` расходится не больше чем на 2.2e-16 при том же порядке строк. Такое расхождение даёт бейзлайн организаторов (ExtraTrees с `n_jobs=2` складывает деревья в двух потоках), скор от него не меняется.
 
-# контактные листы train-кадров (рамки, слоты, прод-детекции, ручные счётчики) -> report/sheets/
-python tools/contact_sheet.py [--frames im_...] [--context]
+4. Только сабмит, без сверки:
 
-# опорное предсказание бейзлайна организаторов (режим calibrated)
-python tracks/core/base_calibrated.py
+   ```bash
+   python run.py --data data --artifacts artifacts --config configs/submissions/VLM_hands_avg.yaml --out submission.csv
+   ```
 
-# сборка предсказания по конфигу (источники из sources, привязка, контекст, стекер, постобработка)
-python tracks/core/build_pred.py --name <name> [--config configs/default.yaml]
+Проверено на чистом клоне 15.11.2026: шаг 1 занял 25 с, шаг 2 2 мин 40 с (из них 2 мин 20 с скачивание 570 МБ данных), шаг 3 35 с, оба файла `OK`.
 
-# абляция «минус один источник» и проверка отдельных параметров (честный out-of-fold по дням)
-python tools/ablate.py [--set post.items_prior=false] [--set temporal.people_max_area=36000]
+### в) Полный пересчёт источников
 
-# абляция заменой колонок: базовый файл с отдельными колонками из другого предсказания, затем gate (раздел 12.5)
-python tools/swap_cols.py --base base_calibrated --donor R1c --cols occ_prob --name AB_occ
+Все модели запускались в ноутбуках Kaggle на Tesla T4 с выключенным интернетом. Веса закреплены по ревизии, ссылки в [MODELS.md](MODELS.md).
 
-# новый источник одной командой: ts.check -> привязка -> счётчики -> замена колонок в базовом файле -> gate
-python tools/try_source.py --source coco_person__v1 --cols people --base <лучший файл> --name AB_people_coco
+| этап | что получается | команда или ноутбук | железо | время |
+|---|---|---|---|---|
+| 1 | свой детектор `ft_yolo_v1`: датасет из aux-кадров и псевдометок прод-детектора, обучение, детекции `dets/ft_yolo__v1` | [tracks/det/kaggle/det_train_ft_yolo.ipynb](tracks/det/kaggle/det_train_ft_yolo.ipynb) (`build_dataset.py`, `train.py`, `infer.py`) | T4 | обучение 2.7 ч, инференс 25 мин |
+| 2 | Grounding DINO и OWLv2 на кропах столов, детекции `dets/ov_gdino__v1`, `dets/ov_owl__v1` | [tracks/ov/kaggle_c2_c5.ipynb](tracks/ov/kaggle_c2_c5.ipynb), прогон https://www.kaggle.com/code/throddy/notebookc45eeb95e0?scriptVersionId=369282247 | 2 × T4 | около 64 и 45 мин |
+| 3 | счётчики по строкам `rowfeats/ov_counts__v1` | `python tracks/ov/eval_dets.py ov_gdino__v1 ov_owl__v1 --rowfeats 1` | CPU | меньше минуты |
+| 4 | ответы Qwen3-VL-4B по 4964 строкам, 4 шарда | [tracks/det/kaggle/det_vlm_all_a.ipynb](tracks/det/kaggle/det_vlm_all_a.ipynb) и [det_vlm_all_b.ipynb](tracks/det/kaggle/det_vlm_all_b.ipynb), прогоны https://www.kaggle.com/code/throddy/ts-det-vlm-shards-0-1 и https://www.kaggle.com/code/throddy/notebook15b164940c?scriptVersionId=369589586 | 2 × T4 на двух аккаунтах | 62–70 мин на шард, всего 4.35 GPU-часа |
+| 5 | склейка ответов VLM в `rowfeats/vlm_qwen__v1` | `python tracks/det/vlm/run_vlm.py --subset all --of 4 --merge` | CPU | секунды |
+| 6 | сабмит | `python run.py ...` из пути б | CPU | 15 с |
 
-# колонка из признаков строк (rowfeats) вместо счётчика: проверка -> сборка -> замена в базовом файле -> gate
-python tools/try_rowfeat.py --rowfeats ov_counts__v1 --column ov_counts__items_gdino_and_owl --col items --base NB1 --name OV_items_and
+Подробности по трекам: [tracks/det/README.md](tracks/det/README.md), [tracks/ov/README.md](tracks/ov/README.md).
 
-# разбор ошибки на train по колонкам: недосчёт и пересчёт, ИК и цвет, столы с людьми и без
-python tools/error_breakdown.py COMBO
+## Как устроено решение
 
-# демо очереди оператора -> report/demo_queue.jpg, report/demo_queue.csv
-python tracks/core/demo_queue.py
+Предсказание собирается по колонкам. Основа это бейзлайн организаторов, отдельные колонки заменены своими, если замена подняла Public. Метрика складывается из вкладов колонок, поэтому каждая замена проверялась отдельным сабмитом.
 
-# три журнала одной таблицей
-python tools/log_all.py --tail 30
+| колонка | источник | правило | вклад на Public |
+|---|---|---|---|
+| `people` | прод-детектор | правило бейзлайна и добор людей, сидящих за дальней стороной стола (нижняя треть бокса в зоне столешницы) | +0.0055 |
+| `hands` | прод-детектор, свой детектор `ft_yolo_v1`, VLM | руки детекторов, затем половина шага вверх к ответу VLM; без людей рук нет, не больше двух рук на человека | +0.0107, затем +0.0160 |
+| `cups` | бейзлайн организаторов | чашки прод-детектора | замены не помогли |
+| `dishes` | прод-детектор, OWLv2 | max(2 × подносы, посуда OWLv2 на кропе стола) | +0.0421 за множитель 2, +0.0253 за OWLv2 |
+| `items` | Grounding DINO и OWLv2, VLM | max(вещи, найденные обеими моделями за занятым столом; ответ VLM) | +0.0188, затем +0.0436 |
+| `occ_prob` | бейзлайн организаторов | ExtraTrees по признакам прод-детекций | AP на Public уже 1.0 |
 
-# гистограммы площади боксов person -> report/person_area_hist.png
-python tools/person_area_hist.py
+Второй финал `VLM_items` отличается только колонкой `hands`, в нём нет шага к VLM. История всех сабмитов в [experiments/README.md](experiments/README.md), разбор и ограничения в [report/REPORT.md](report/REPORT.md).
 
-# проверка и регистрация сабмита (только роль A, на Kaggle не отправляет)
-python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
-
-# единый воспроизводимый запуск финала: кэши треков B и C и VLM берутся из artifacts/, около 15 секунд на CPU
-python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/VLM_hands_avg.yaml --out submission.csv
-
-# сборка сабмита из колонок нескольких файлов с проверкой, что конфиг даёт тот же файл
-python tools/combo.py --base NB1 --take hands=AB_ft_hands_pp items=OV_items_and_pp dishes=OV_dishes_owl_max --config configs/COMBO.yaml --name COMBO
-```
-
-## Библиотека `ts` в двух словах
-
-```python
-from ts import io, paths
-from ts.rows import load_rows_ext
-from ts.crops import crop_table, to_frame_coords
-
-rows = load_rows_ext()                       # индекс строк, формат 8.3
-r = rows.iloc[0]
-crop, meta = crop_table(r.src_frame_id, (r.x1, r.y1, r.x2, r.y2), kind='top', scale=4.0, slot=r.slot)
-# boxes: np.ndarray (n, 4) в пикселях кропа -> пиксели кадра 1280×720
-boxes_frame = to_frame_coords(boxes, meta)
-out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать артефакт
-```
-
-Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack, post`.
-Заглушка: `viz`.
-
-## Финал
-
-Отмечены две отправки: `VLM_hands_avg` (Public 0.75957, `configs/submissions/VLM_hands_avg.yaml`, он же `configs/default.yaml`) и `VLM_items` (0.74357). Эталонный прогон: `notebooks/final_inference.ipynb` (Kaggle `throddy/table-state-final-inference`, версия 5), колонки и их источники: `report/REPORT.md`, раздел 2.4. VLM-кэш `rowfeats/vlm_qwen__v1` склеивается из шардов: `python tracks/det/vlm/run_vlm.py --subset all --of 4 --merge`.
-
-## Предыдущая основа
-
-`COMBO` = бейзлайн организаторов + `people` с добором по нижней трети бокса (NB1, Public 0.64519) + руки `ft_yolo__v1` (0.65585)
-+ вещи при согласии двух моделей трека C (0.66401) + посуда OWLv2 вне подносов (0.67045). Собирается по `configs/default.yaml`:
-блок `compose` говорит, какая колонка берётся из своей сборки (`stack`), а какая из бейзлайна (`baseline`), `post.tray_mult` задаёт множитель подносов для dishes.
-Колонка меняется только после проверки заменой на Public (раздел 12.5 контракта).
-
-## Как подключить новый источник (делает A)
-
-1. Положить файл и карточку в `artifacts/dets/<source>__v<N>.parquet` или `artifacts/rowfeats/<source>__v<N>.parquet`.
-2. Проверить: `python -m ts.check dets artifacts/dets/<source>__v<N>.parquet` (или `rowfeats`).
-3. Дописать имя без расширения в `sources.dets` или `sources.rowfeats` в `configs/default.yaml`. Для счётчика, который раньше был нулевым (items), включить его в `stack.counts` (`items: cur`); для признаков строк задать `stack.vote`.
-4. Быстрый путь: `python tools/try_source.py --source <source>__v<N> --cols <колонки> --base <лучший файл> --name AB_<...>` делает шаги 2–3 во временном конфиге, собирает предсказание и подставляет указанные колонки в базовый файл (проверка по 12.5).
-   `python tools/ablate.py` покажет полную сборку и варианты без каждого источника. Пороги confidence нового источника (по одному на счётчик) подбираются на дне подгонки автоматически.
-5. Принять источник по правилу 12.3, собрать `python tracks/core/build_pred.py --name S<N>` и записать строку в журнал.
-
-## Структура
+## Где что лежит
 
 ```
-ts/            общая библиотека (владелец A), ts/vendor/score.py это копия score.py организаторов
-tracks/core/   трек A      tracks/det/   трек B      tracks/ov/   трек C
-tools/         sanity, eval_pred, submit_gate, contact_sheet
-configs/       default.yaml и замороженные конфиги сабмитов
-experiments/   LOG_core.md, LOG_det.md, LOG_ov.md (журналы треков), PROPOSALS.md, ORG_ANSWERS.md
-submissions/   <name>.csv + <name>.json        report/   отчёт, листы, слайды
-data/, artifacts/   не в git
+run.py                 сборка сабмита по конфигу из data/ и artifacts/
+configs/               default.yaml (финальный конфиг) и submissions/ (замороженный конфиг каждого сабмита)
+ts/                    библиотека: чтение данных, привязка объектов к столам, контекст ±30 с, стекер, метрика, проверки
+tracks/core/           сборка предсказаний, демо очереди оператора, разбор ошибок по людям
+tracks/det/            свой детектор (YOLO11m) и VLM-счётчик, ноутбуки Kaggle
+tracks/ov/             Grounding DINO и OWLv2 на кропах столов, ноутбуки Kaggle
+tracks/*/experiments/  разовые разборы, на которые ссылаются журналы
+tools/                 скачивание кэшей, сверка финалов, оценка и регистрация сабмитов
+notebooks/             финальный ноутбук Kaggle
+submissions/           все собранные сабмиты с карточками
+experiments/           таблица сабмитов и журналы трёх треков
+report/                отчёт и демо очереди оператора
+tests/                 тесты библиотеки (python -m pytest tests)
 ```
 
-Зоны владения описаны в разделе 5 контракта: каждый трек пишет только в `tracks/<свой трек>/`,
-свои файлы в `artifacts/`, добавляет строки в конец журнала своего трека `experiments/LOG_<core|det|ov>.md` и в `MODELS.md`.
+`data/` и `artifacts/` в git не входят, их заполняет `tools/fetch_artifacts.py`.
 
-## Kaggle
+## Ссылки
 
-Соревнование: <https://www.kaggle.com/competitions/rascar-hack-case-2/overview> (слаг `rascar-hack-case-2`).
-Эталонный прогон решения идёт в Kaggle Notebook (раздел 6.1 контракта).
-
-Каталог данных в ноутбуке ищется так же, как в `baseline.ipynb` организаторов: по наличию
-`train_labels.csv`, `tables.csv` и `data_card.json` внутри `/kaggle/input`. Слаг в коде не хардкодится.
-Переменные надо выставить до первого импорта `ts`:
-
-```python
-import os, sys
-sys.path.insert(0, '/kaggle/working/table-state')        # куда положен код репозитория
-from pathlib import Path
-candidates = [p.parent for p in Path('/kaggle/input').rglob('train_labels.csv')
-              if (p.parent / 'tables.csv').is_file() and (p.parent / 'data_card.json').is_file()]
-assert len(candidates) == 1, 'Подключите датасет соревнования или распакуйте архив и укажите TS_DATA'
-os.environ['TS_DATA'] = str(candidates[0])
-os.environ['TS_ARTIFACTS'] = '/kaggle/working/artifacts'
-```
-
-То же самое делает `ts.paths.find_data_dir()`. Скрипты запускаются одной ячейкой:
-`!python tracks/<трек>/<скрипт>.py ...`.
-
-Общие артефакты команды это приватные Kaggle Datasets с доступом всем участникам:
-
-| Датасет | Что внутри |
-|---|---|
-| `victimestsate/ts-artifacts-dets` | детекции трека B: `dets/coco_person__v1`, `coco_crop__v1`, `ft_yolo__v1`, `ft_yolo_tta__v1`, `pose__v1` + карточки, `rows_ext.parquet` |
-| `throddy/ts-artifacts-ov-pseudo` | трек C: `artifacts/dets/ov_gdino__v1`, `ov_owl__v1`, `artifacts/labels/ov_pseudo__v1`, `artifacts/rowfeats/ov_counts__v1` + карточки, веса моделей |
-| `ts-artifacts-rowfeats` | `rowfeats/<source>__v<N>.parquet` + карточки и `__raw.jsonl` |
-| `ts-models` | веса моделей и колёса зависимостей для запуска без интернета |
-| `ts-code` | архив закоммиченного кода репозитория и файл `GIT_SHA` (`python tracks/det/kaggle/pack_code.py`); новая версия после каждого изменения кода |
-
-Новая версия артефакта это новая версия датасета, номер версии указывается в карточке.
-Финальный ноутбук `notebooks/final_inference.ipynb` запускается с выключенным интернетом.
-Отправляет сабмиты только A: `kaggle competitions submit -c rascar-hack-case-2 -f submissions/<name>.csv -m "<name> <git sha>"`.
+- [report/REPORT.md](report/REPORT.md), отчёт: подход, валидация по дням, история на Public, ошибки по классам, время работы, соблюдение правил.
+- [MODELS.md](MODELS.md), модели, ссылки на веса, ревизии и лицензии.
+- Данные: соревнование https://www.kaggle.com/competitions/rascar-hack-case-2.
+- Кэши и код на Kaggle: датасеты `throddy/table-state-code`, `victimestsate/ts-artifacts-dets`, `throddy/ts-artifacts-ov-pseudo`, ноутбуки `throddy/ts-det-vlm-shards-0-1`, `throddy/notebook15b164940c`, `throddy/table-state-final-inference`. Они приватные, доступ открыт проверяющим.

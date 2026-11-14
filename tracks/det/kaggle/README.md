@@ -55,9 +55,9 @@ python tracks/det/infer.py --source ft_yolo --version 2 --weights <ts-models>/ft
 python tracks/det/infer.py --source ft_yolo --tta --weights <ts-models>/ft_yolo_v1.pt --half     # ft_yolo_tta__v1 (выключен)
 ```
 
-Каждая команда инференса должна совпадать с полем `command` карточки артефакта: от точности (FP32 или FP16) зависят confidence.
+Каждая команда инференса должна совпадать с полем `command` карточки артефакта, потому что от точности (FP32 или FP16) зависят confidence.
 
-Точка входа для `run.py` (этап 2 раздела 15.1): та же команда с `--from-cache`. Если
+Точка входа для `run.py`, когда детекции уже посчитаны, это та же команда с `--from-cache`. Если
 `$TS_ARTIFACTS/dets/<source>__v<N>.parquet` уже лежит и проходит `ts.check`, скрипт ничего не считает
 и завершается с кодом 0; иначе считает источник заново.
 
