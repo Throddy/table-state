@@ -1,3 +1,6 @@
+# Финальная сборка VLM_hands_avg (Public 0.75957), отмечена на Kaggle вместе с VLM_items (0.74357).
+# Колонки: people, cups, dishes, occ_prob как в COMBO; items = max(согласие Grounding DINO и OWLv2 за занятым столом, VLM);
+# hands = руки COMBO + половина шага вверх к VLM, затем правила по людям. Замороженная копия: configs/submissions/VLM_hands_avg.yaml.
 # Основной конфиг сборки. Меняет только роль A (раздел 5 контракта).
 seed: 419
 
@@ -5,7 +8,7 @@ seed: 419
 # dets: prod или имя файла artifacts/dets/<source>__v<N> без расширения; rowfeats: artifacts/rowfeats/<source>__v<N>.
 sources:
   dets: [prod, ft_yolo__v1]
-  rowfeats: [ov_counts__v1]
+  rowfeats: [ov_counts__v1, vlm_qwen__v1]
   counters: {ft_yolo__v1: [hands]}     # от ft_yolo берутся только руки
 
 slots:
@@ -94,3 +97,9 @@ post:
   # детекции plate и bowl от трека C: добавить источник в sources.dets, поставить tray_mult: 1.0 и
   # сравнить заменой колонки; множитель остаётся запасным вариантом.
   tray_mult: 2.0               # проверено на Public: 1 даёт 0.598, 2 даёт 0.640–0.645, 3 даёт 0.603; вопрос закрыт
+
+# Финальные замены колонок счётчиком VLM (Qwen3-VL-4B по широкому кропу стола, rowfeats vlm_qwen__v1).
+# Применяются после постобработки; строка без ответа VLM (vlm_qwen__ok = 0) остаётся как в COMBO.
+overrides:
+  items: {column: vlm_qwen__items, mode: max}
+  hands: {column: vlm_qwen__hands, mode: avg_up}
