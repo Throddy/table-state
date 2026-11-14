@@ -87,8 +87,8 @@ python tools/person_area_hist.py
 # проверка и регистрация сабмита (только роль A, на Kaggle не отправляет)
 python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
 
-# единый воспроизводимый запуск: детекции треков B и C берутся из artifacts/, 15 секунд на CPU
-python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/COMBO.yaml --out submission.csv
+# единый воспроизводимый запуск финала: кэши треков B и C и VLM берутся из artifacts/, около 15 секунд на CPU
+python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/VLM_hands_avg.yaml --out submission.csv
 
 # сборка сабмита из колонок нескольких файлов с проверкой, что конфиг даёт тот же файл
 python tools/combo.py --base NB1 --take hands=AB_ft_hands_pp items=OV_items_and_pp dishes=OV_dishes_owl_max --config configs/COMBO.yaml --name COMBO
@@ -112,7 +112,11 @@ out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать арт
 Готово: `paths, io, slots, rows, geometry, crops, metric, cv, check, assign, temporal, features, stack, post`.
 Заглушка: `viz`.
 
-## Текущая основа
+## Финал
+
+Отмечены две отправки: `VLM_hands_avg` (Public 0.75957, `configs/submissions/VLM_hands_avg.yaml`, он же `configs/default.yaml`) и `VLM_items` (0.74357). Эталонный прогон: `notebooks/final_inference.ipynb` (Kaggle `throddy/table-state-final-inference`, версия 5), колонки и их источники: `report/REPORT.md`, раздел 2.4. VLM-кэш `rowfeats/vlm_qwen__v1` склеивается из шардов: `python tracks/det/vlm/run_vlm.py --subset all --of 4 --merge`.
+
+## Предыдущая основа
 
 `COMBO` = бейзлайн организаторов + `people` с добором по нижней трети бокса (NB1, Public 0.64519) + руки `ft_yolo__v1` (0.65585)
 + вещи при согласии двух моделей трека C (0.66401) + посуда OWLv2 вне подносов (0.67045). Собирается по `configs/default.yaml`:
