@@ -81,8 +81,11 @@ python tools/person_area_hist.py
 # проверка и регистрация сабмита (только роль A, на Kaggle не отправляет)
 python tools/submit_gate.py --pred artifacts/preds/<name>.csv --note "<вопрос, на который отвечает сабмит>"
 
-# единый воспроизводимый запуск (задача A7, пока заглушка)
-python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/<name>.yaml --out submission.csv
+# единый воспроизводимый запуск: детекции треков B и C берутся из artifacts/, 15 секунд на CPU
+python run.py --data $TS_DATA --artifacts $TS_ARTIFACTS --config configs/submissions/COMBO.yaml --out submission.csv
+
+# сборка сабмита из колонок нескольких файлов с проверкой, что конфиг даёт тот же файл
+python tools/combo.py --base NB1 --take hands=AB_ft_hands_pp items=OV_items_and_pp dishes=OV_dishes_owl_max --config configs/COMBO.yaml --name COMBO
 ```
 
 ## Библиотека `ts` в двух словах
@@ -105,7 +108,8 @@ out = paths.art('dets', 'ov_gdino__v1.parquet')   # куда писать арт
 
 ## Текущая основа
 
-`NB1` (Public 0.64519) = бейзлайн организаторов + `people` с добором по нижней трети бокса. Собирается по `configs/default.yaml`:
+`COMBO` = бейзлайн организаторов + `people` с добором по нижней трети бокса (NB1, Public 0.64519) + руки `ft_yolo__v1` (0.65585)
++ вещи при согласии двух моделей трека C (0.66401) + посуда OWLv2 вне подносов (0.67045). Собирается по `configs/default.yaml`:
 блок `compose` говорит, какая колонка берётся из своей сборки (`stack`), а какая из бейзлайна (`baseline`), `post.tray_mult` задаёт множитель подносов для dishes.
 Колонка меняется только после проверки заменой на Public (раздел 12.5 контракта).
 
