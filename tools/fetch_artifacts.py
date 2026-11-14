@@ -46,11 +46,46 @@ def kaggle(*args: str) -> None:
         raise SystemExit(f'Ошибка Kaggle CLI ({" ".join(args[:3])}): {done.stdout[-500:]} {done.stderr[-500:]}')
 
 
+MAX_UNZIPPED = 2 * 1024 ** 3      # пакет соревнования около 570 МБ, кэши меньше 10 МБ
+
+
 def unzip_all(folder: Path) -> None:
+    """Распаковать скачанные архивы с проверкой каждого элемента.
+
+    Отклоняются абсолютные пути, выход за каталог архива, ссылки и архивы больше MAX_UNZIPPED в распакованном виде.
+    """
     for archive in list(folder.rglob('*.zip')):
+        dest = archive.parent.resolve()
         with zipfile.ZipFile(archive) as z:
-            z.extractall(archive.parent)
+            members = z.infolist()
+            if sum(m.file_size for m in members) > MAX_UNZIPPED:
+                raise SystemExit(f'{archive.name}: распакованный размер больше {MAX_UNZIPPED >> 30} ГБ')
+            for m in members:
+                target = (dest / m.filename).resolve()
+                is_link = (m.external_attr >> 16) & 0o170000 == 0o120000
+                if m.filename.startswith(('/', '\\')) or not target.is_relative_to(dest) or is_link:
+                    raise SystemExit(f'{archive.name}: недопустимый элемент архива {m.filename!r}')
+                if m.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(m) as src, open(target, 'wb') as out:
+                    shutil.copyfileobj(src, out, 1 << 20)
         archive.unlink()
+
+
+def check_manifest(data: Path) -> None:
+    """Сверить файлы пакета с MANIFEST.sha256 организаторов."""
+    import hashlib
+    bad = []
+    for line in (data / 'MANIFEST.sha256').read_text().splitlines():
+        digest, name = line.split(maxsplit=1)
+        path = data / name.strip()
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            bad.append(name.strip())
+    if bad:
+        raise SystemExit(f'{len(bad)} файлов пакета не совпали с MANIFEST.sha256, например {bad[0]}')
+    print('пакет сверен с MANIFEST.sha256')
 
 
 def fetch_data(data: Path) -> None:
@@ -63,6 +98,7 @@ def fetch_data(data: Path) -> None:
     unzip_all(data)
     if not (data / 'train_labels.csv').is_file():
         raise SystemExit(f'В {data} нет train_labels.csv после распаковки')
+    check_manifest(data)
 
 
 def fetch_dataset_files(art: Path) -> None:
