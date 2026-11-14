@@ -69,6 +69,9 @@ python tools/swap_cols.py --base base_calibrated --donor R1c --cols occ_prob --n
 # новый источник одной командой: ts.check -> привязка -> счётчики -> замена колонок в базовом файле -> gate
 python tools/try_source.py --source coco_person__v1 --cols people --base <лучший файл> --name AB_people_coco
 
+# колонка из признаков строк (rowfeats) вместо счётчика: проверка -> сборка -> замена в базовом файле -> gate
+python tools/try_rowfeat.py --rowfeats ov_counts__v1 --column ov_counts__items_gdino_and_owl --col items --base NB1 --name OV_items_and
+
 # три журнала одной таблицей
 python tools/log_all.py --tail 30
 
@@ -157,7 +160,8 @@ os.environ['TS_ARTIFACTS'] = '/kaggle/working/artifacts'
 
 | Датасет | Что внутри |
 |---|---|
-| `ts-artifacts-dets` | `dets/<source>__v<N>.parquet` + карточки, `rows_ext.parquet` |
+| `victimestsate/ts-artifacts-dets` | детекции трека B: `dets/coco_person__v1`, `coco_crop__v1`, `ft_yolo__v1`, `ft_yolo_tta__v1`, `pose__v1` + карточки, `rows_ext.parquet` |
+| `throddy/ts-artifacts-ov-pseudo` | трек C: `artifacts/dets/ov_gdino__v1`, `ov_owl__v1`, `artifacts/labels/ov_pseudo__v1`, `artifacts/rowfeats/ov_counts__v1` + карточки, веса моделей |
 | `ts-artifacts-rowfeats` | `rowfeats/<source>__v<N>.parquet` + карточки и `__raw.jsonl` |
 | `ts-models` | веса моделей и колёса зависимостей для запуска без интернета |
 | `ts-code` | архив закоммиченного кода репозитория и файл `GIT_SHA` (`python tracks/det/kaggle/pack_code.py`); новая версия после каждого изменения кода |
