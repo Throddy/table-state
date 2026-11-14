@@ -103,8 +103,8 @@ def run(args, name: str) -> None:
         return
     torch.manual_seed(common.SEED)
     processor = AutoProcessor.from_pretrained(str(args.model), local_files_only=True)
-    model = AutoModelForImageTextToText.from_pretrained(str(args.model), local_files_only=True, torch_dtype=torch.float16,
-                                                        device_map={'': args.device})
+    model = AutoModelForImageTextToText.from_pretrained(str(args.model), local_files_only=True,
+                                                        dtype=getattr(torch, args.dtype), device_map={'': args.device})
     model.eval()
     prompt = PROMPT_FILE.read_text(encoding='utf-8').strip()
     out = folder / f'shard_{args.shard}_of_{args.of}.jsonl'
@@ -152,7 +152,7 @@ def merge(args, name: str) -> None:
             'not_ok_share': round(float((table[f'{SOURCE}__ok'] == 0).mean()), 4),
             'manual_labels_used': False, 'uses_train_counters': False,
             'params': {'prompt': f'tracks/det/vlm/prompts/{PROMPT_ID}.txt', 'crop': 'wide', 'scale': WIDE_SCALE, 'long_side': LONG_SIDE,
-                       'do_sample': False, 'max_new_tokens': MAX_NEW_TOKENS, 'dtype': 'float16', 'seed': common.SEED},
+                       'do_sample': False, 'max_new_tokens': MAX_NEW_TOKENS, 'dtype': args.dtype, 'seed': common.SEED},
             'notes': 'счётчики VLM по широкому кропу с рамкой целевого стола; −1 и __ok = 0, если ответ не разобран'}
     path.with_suffix('.json').write_text(json.dumps(card, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     if args.subset == 'all':
@@ -169,6 +169,7 @@ def main() -> None:
     parser.add_argument('--shard', type=int, default=0)
     parser.add_argument('--of', type=int, default=1)
     parser.add_argument('--device', default='cuda:0')
+    parser.add_argument('--dtype', choices=['float16', 'float32'], default='float16', help='float32 только для отладки на CPU')
     parser.add_argument('--version', type=int, default=1)
     parser.add_argument('--limit', type=int, default=0, help='отладка: не больше N строк за запуск')
     parser.add_argument('--merge', action='store_true', help='собрать rowfeats из готовых шардов')
