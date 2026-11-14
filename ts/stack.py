@@ -247,18 +247,22 @@ def make_fit_predict(cfg: dict, log: list | None = None):
                 raw[column] = base_raw[column].to_numpy(float)
         pred = post.apply(raw, local)
         compose = cfg.get('compose') or {}
-        unknown = set(compose.values()) - {'stack', 'baseline', 'baseline_max'}
+        unknown = set(compose.values()) - {'stack', 'baseline', 'baseline_max', 'baseline_avg'}
         if unknown:
             raise ValueError(f'compose: неизвестный источник колонки {sorted(unknown)}, '
-                             'допустимы stack, baseline и baseline_max')
-        from_baseline = [c for c, origin in compose.items() if origin in ('baseline', 'baseline_max')]
+                             'допустимы stack, baseline, baseline_max и baseline_avg')
+        from_baseline = [c for c, origin in compose.items() if origin in ('baseline', 'baseline_max', 'baseline_avg')]
         if from_baseline:
             from . import orgbase
             base = orgbase.calibrated(train_rows, pred['row_id'].tolist()).set_index('row_id').loc[pred['row_id']]
             for column in from_baseline:
                 values = base[column].to_numpy(float)
                 # baseline_max: максимум из колонки бейзлайна и своей сборки (новый источник только добавляет объекты)
-                pred[column] = np.maximum(values, pred[column].to_numpy(float)) if compose[column] == 'baseline_max' else values
+                own = pred[column].to_numpy(float)
+                # baseline_avg: среднее колонки бейзлайна и своей сборки без округления. Ошибка метрики это модуль,
+                # он выпуклый: среднее двух прогнозов не хуже среднего их ошибок, а при ошибках разного знака лучше обоих.
+                pred[column] = {'baseline': values, 'baseline_max': np.maximum(values, own),
+                                'baseline_avg': 0.5 * values + 0.5 * own}[compose[column]]
         return pred
 
     fit_predict.n_params = None
