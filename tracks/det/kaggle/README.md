@@ -9,6 +9,8 @@
 | данные соревнования | `rascar-hack-case-2`; при запуске через API соревнование не подключается, поэтому используется приватная копия пакета `ts-data-private` | пакет организаторов |
 | `ts-models` (приватный Dataset) | каталог `artifacts/ts-models/` после `python tracks/det/fetch_weights.py --wheels` | `yolo11x.pt`, `yolo11m.pt`, `yolo11x-pose.pt`, `wheels/*.whl`, `MANIFEST.json` |
 | `ts-code` (приватный Dataset) | `artifacts/ts-code.zip` после `python tracks/det/kaggle/pack_code.py` | закоммиченный код репозитория и файл `GIT_SHA` |
+| `ts-artifacts-dets` (приватный Dataset, только для v2) | детекции трека B | `dets/ft_yolo__v1.parquet`: предсказания v1 для самообучения |
+| `throddy/ts-artifacts-ov-pseudo` (только для v2) | трек C | `artifacts/labels/ov_pseudo__v1.parquet`: псевдометки phone и tray |
 
 После каждого изменения кода: коммит, `pack_code.py`, новая версия датасета `ts-code`.
 
